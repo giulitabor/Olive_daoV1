@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Olive DAO Dashboard</title>
+    <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+    <script src="https://unpkg.com/@coral-xyz/anchor@latest/dist/browser/anchor.min.js"></script>
+    <script src="https://unpkg.com/buffer@latest/index.js"></script>
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.min.js"></script>
+
+<script src="https://unpkg.com/@coral-xyz/anchor@latest/dist/browser.anchor.min.js"></script>
+
+<script src="https://bundle.run/buffer@6.0.3"></script>
+<script>
+  // Manually define Buffer so it's available globally
+  window.Buffer = buffer.Buffer;
+</script>
+
+</head>
+<body>
+    <h1>Olive DAO Pre-sale</h1>
+    <button id="connectWallet">Connect Wallet</button>
+    
+    <hr/>
+    
+    <h3>Initialize Program (Authority Only)</h3>
+    <input type="number" id="priceSol" placeholder="Price in Lamports">
+    <input type="number" id="priceUsdc" placeholder="Price in USDC (micros)">
+    <button onclick="initialize()">Initialize</button>
+
+    <h3>Buy Tokens</h3>
+    <input type="number" id="buyAmount" placeholder="Amount to Buy">
+    <button onclick="buyWithSol()">Buy with SOL</button>
+    <button onclick="buyWithUsdc()">Buy with USDC</button>
+
+    <script>
+        // Set up global Buffer for Anchor
+        window.Buffer = buffer.Buffer;
+
+        const PROGRAM_ID = new anchor.web3.PublicKey("6BU1fyoGLqvRUyeWGJhYcLB9hp5rAEYkVivA6Ppvwc72");
+        const STATE_SEED = "state";
+        const VAULT_SEED = "vault";
+
+        let provider;
+        let program;
+
+        // 1. Connect Wallet and Setup Anchor
+        document.getElementById('connectWallet').onclick = async () => {
+            if (!window.solana) return alert("Please install Phantom!");
+            
+            await window.solana.connect();
+            const connection = new anchor.web3.Connection(anchor.web3.clusterApiUrl('devnet'), 'confirmed');
+            
+            // Anchor Provider uses the browser wallet
+            provider = new anchor.AnchorProvider(connection, window.solana, { commitment: 'confirmed' });
+            
+            // Fetch IDL - Replace with your actual IDL JSON object
+            const idl = await fetch('./idl.json').then(res => res.json());
+            program = new anchor.Program(idl, PROGRAM_ID, provider);
+            
+            alert("Wallet Connected: " + provider.wallet.publicKey.toString());
+        };
+
+        // 2. Derive PDAs
+        async function getPDAs() {
+            const [statePDA] = anchor.web3.PublicKey.findProgramAddressSync(
+                [anchor.utils.bytes.utf8.encode(STATE_SEED)],
+                PROGRAM_ID
+            );
+            const [vaultPDA] = anchor.web3.PublicKey.findProgramAddressSync(
+                [anchor.utils.bytes.utf8.encode(VAULT_SEED)],
+                PROGRAM_ID
+            );
+            return { statePDA, vaultPDA };
+        }
+
+        // 3. Initialize Instruction
+        async function initialize() {
+            const { statePDA, vaultPDA } = await getPDAs();
+            const priceSol = new anchor.BN(document.getElementById('priceSol').value);
+            const priceUsdc = new anchor.BN(document.getElementById('priceUsdc').value);
+
+            try {
+                const tx = await program.methods
+                    .initialize(priceSol, priceUsdc)
+                    .accounts({
+                        state: statePDA,
+                        vault: vaultPDA,
+                        // Add other required accounts based on your Initialize struct
+                        authority: provider.wallet.publicKey,
+                        systemProgram: anchor.web3.SystemProgram.programId,
+                        tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+                        rent: anchor.web3.SYSVAR_RENT_PUBKEY,
+                    })
+                    .rpc();
+                console.log("Initialization success:", tx);
+            } catch (err) {
+                console.error("Initialization failed:", err);
+            }
+        }
+
+        // 4. Buy with SOL Instruction
+        async function buyWithSol() {
+            const { statePDA, vaultPDA } = await getPDAs();
+            const amount = new anchor.BN(document.getElementById('buyAmount').value);
+
+            try {
+                // Fetch state to get treasury address
+                const stateData = await program.account.globalState.fetch(statePDA);
+
+                const tx = await program.methods
+                    .buyWithSol(amount)
+                    .accounts({
+                        state: statePDA,
+                        vault: vaultPDA,
+                        treasurySol: stateData.treasurySol,
+                        buyer: provider.wallet.publicKey,
+                        tokenProgram: anchor.utils.token.TOKEN_PROGRAM_ID,
+                    })
+                    .rpc();
+                console.log("Purchase success:", tx);
+            } catch (err) {
+                console.error("Purchase failed:", err);
+            }
+        }
+    </script>
+</body>
+</html>

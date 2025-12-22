@@ -1,0 +1,85 @@
+{
+  "feeds": [
+    {
+      "name": "SOL/USD",
+      "description": "Solana price in USD from CoinGecko",
+      "queue": "4Ru1XqG5kMG3RZ9KH4L9DVEv1g3A3KpXCKUxw7pD6e3d",
+      "batch_size": 1,
+      "jobs": [
+        {
+          "name": "CoinGecko SOL/USD",
+          "type": "http",
+          "url": "https://api.coingecko.com/api/v3/simple/price?ids=solana&vs_currencies=usd",
+          "method": "GET",
+          "path": ["solana", "usd"],
+          "scaling_factor": 100
+        }
+      ]
+    },
+    {
+      "name": "USDC/USD",
+      "description": "USDC price in USD from CoinGecko",
+      "queue": "4Ru1XqG5kMG3RZ9KH4L9DVEv1g3A3KpXCKUxw7pD6e3d",
+      "batch_size": 1,
+      "jobs": [
+        {
+          "name": "CoinGecko USDC/USD",
+          "type": "http",
+          "url": "https://api.coingecko.com/api/v3/simple/price?ids=usd-coin&vs_currencies=usd",
+          "method": "GET",
+          "path": ["usd-coin", "usd"],
+          "scaling_factor": 100
+        }
+      ]
+    },
+    {
+      "name": "Olive Oil EUR/kg",
+      "description": "Olive Oil price in Europe in EUR/kg",
+      "queue": "<YOUR_CUSTOM_QUEUE_ADDRESS>",
+      "batch_size": 1,
+      "jobs": [
+        {
+          "name": "Olive Oil Price API",
+          "type": "http",
+          "url": "https://your-api.com/olive-oil-price",
+          "method": "GET",
+          "path": ["eur_per_kg"],
+          "scaling_factor": 100
+        }
+      ]
+    },
+    {
+      "name": "CO2 EUR/ton",
+      "description": "CO2 price in Euros per ton",
+      "queue": "<YOUR_CUSTOM_QUEUE_ADDRESS>",
+      "batch_size": 1,
+      "jobs": [
+        {
+          "name": "CO2 Price API",
+          "type": "http",
+          "url": "https://your-api.com/co2-price",
+          "method": "GET",
+          "path": ["eur_per_ton"],
+          "scaling_factor": 100
+        }
+      ]
+    },
+    {
+      "name": "Field CO2 Data",
+      "description": "CO2 captured from the field (manual or IoT data)",
+      "queue": "<YOUR_CUSTOM_QUEUE_ADDRESS>",
+      "batch_size": 1,
+      "jobs": [
+        {
+          "name": "Field Data API",
+          "type": "http",
+          "url": "https://your-api.com/field-data",
+          "method": "GET",
+          "path": ["co2_captured_kg"],
+          "scaling_factor": 100
+        }
+      ]
+    }
+  ]
+}
+

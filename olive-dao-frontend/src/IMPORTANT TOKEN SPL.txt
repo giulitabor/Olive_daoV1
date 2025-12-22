@@ -1,0 +1,48 @@
+Creating token BFbTx2TqzLJZ46mCPyvhCSa4SynJvcRhXbMbbaazCoVq under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Creating account 9XkUVsgqyZK6hVUmBkGeoKpD4ZtGCdMDXxx3nhFkkw6
+
+
+olive@LAPTOP-2THD3CL6:~/olive_dao$ node -e 'const { PublicKey } = require("@solana/web3.js"); const [pda] = PublicKey.findProgramAddressSync([Buffer.from("state")], new PublicKey("B3EdVG6FJndxAemD9fXqVSYmoqhmY11TZShuTHGjV5Wz")); console.log("PDA:", pda.toBase58())'
+
+PDA: 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR
+
+  New mint: 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR
+
+
+DEVNET TOKEN
+
+Creating token 6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA under program TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+
+Address:  6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA
+Decimals:  9
+
+Signature: 3NXyG1dc5hntYtXLkdQJFsfJFtPazsvZjfD6ew9vrSTvVnjzzkg7hp7VkkkWJcPQvgmk54e6YBnZv7bPJLQxrNFs
+
+Updating 6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA
+  Current mint: FN1tSJY8yCnyY3V9Aq6Xui9p5qwsCAABkU5b5kHqpxfP
+  New mint Authority : 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR
+
+Signature: xYbKc2X1hg6rL6g65NDHtSXvfZTpiL8Nx4CzioqdKmHCxtXSrgMPFXdoRzNpiynWYLQKAxL8Qyqmdj8Yo9hn8eV
+
+DEV WALLET : 8xkNHk2VpWBM6Nk3enitFCs7vwh2inCveTNintcXHc54
+
+
+
+olive@LAPTOP-2THD3CL6:~/olive_dao$ spl-token accounts
+Token                                         Balance
+-----------------------------------------------------
+7eiwNiei5ePBxhT9rSNw6qL4RREDUi6wgg8z9DdawtFk  1000000
+BFbTx2TqzLJZ46mCPyvhCSa4SynJvcRhXbMbbaazCoVq  0
+
+olive@LAPTOP-2THD3CL6:~/olive_dao$ spl-token authorize 7eiwNiei5ePBxhT9rSNw6qL4RREDUi6wgg8z9DdawtFk mint <STATE_PDA_ADDRESS> --url
+devnet
+-bash: STATE_PDA_ADDRESS: No such file or directory
+olive@LAPTOP-2THD3CL6:~/olive_dao$ node -e 'const { PublicKey } = require("@solana/web3.js"); const [pda] = PublicKey.findProgramAddressSync([Buffer.from("state")], new PublicKey("B3EdVG6FJndxAemD9fXqVSYmoqhmY11TZShuTHGjV5Wz")); console.log("PDA:", pda.toBase58())'
+PDA: 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR
+olive@LAPTOP-2THD3CL6:~/olive_dao$ spl-token authorize 7eiwNiei5ePBxhT9rSNw6qL4RREDUi6wgg8z9DdawtFk mint 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR --url devnet
+Updating 7eiwNiei5ePBxhT9rSNw6qL4RREDUi6wgg8z9DdawtFk
+  Current mint: FN1tSJY8yCnyY3V9Aq6Xui9p5qwsCAABkU5b5kHqpxfP
+  New mint: 62KkWiXK9K6thx4VjQwDFRrPQUS3GRP9YNrJvCwdYWKR
+
+Signature: 3YyM9CPquZ57Nt8k5gur5qrvvFgGy8kEWBZ2dmYWRY2Z7HPf7sUe9eHB5W2FxENM8sqVUQCRRsqLh1DPDdrQ1GDe
