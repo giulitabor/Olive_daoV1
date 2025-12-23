@@ -285,6 +285,42 @@ const init = async () => {
   });
 };
 
+
+const init = () => {
+  console.log("Olive DAO Logic Initialized");
+  
+  // Link Connect Button
+  document.querySelector('#connect')?.addEventListener('click', async () => {
+    const provider = (window as any).solana;
+    await provider.connect();
+    updateUIBalances();
+    renderProposals();
+  });
+
+  // Link Join Button
+  document.querySelector('#join-dao-btn')?.addEventListener('click', async () => {
+    const provider = (window as any).solana;
+    if (!provider.isConnected) {
+      await provider.connect();
+      updateUIBalances();
+    } else {
+      await (window as any).joinDao();
+    }
+  });
+
+  // Link Create Button
+  document.querySelector('#create-btn')?.addEventListener('click', async () => {
+    // ... your creation logic
+  });
+};
+
+// Run init
+if (document.readyState === 'complete') {
+  init();
+} else {
+  window.addEventListener('load', init);
+}
+
 // --- START APP ---
 if (document.readyState === 'complete' || document.readyState === 'interactive') {
   init();

@@ -1,196 +1,167 @@
-use anchor_lang::prelude::*;
-use anchor_spl::token::{self, Mint, Token, TokenAccount, MintTo};
-use anchor_spl::associated_token::AssociatedToken;
+import './polyfill'; 
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync } from "@solana/spl-token";
+import * as anchor from "@coral-xyz/anchor";
+import idl from "./idl.json";
 
-declare_id!("B3EdVG6FJndxAemD9fXqVSYmoqhmY11TZShuTHGjV5Wz");
+const OLV_MINT = new PublicKey("6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA");
+const DAO_STAKE_VAULT = new PublicKey("FrNP32Hxhuu4pS8yguHhtTEdU9QpU7odRYi5zKNps15N");
+const programId = new PublicKey("B3EdVG6FJndxAemD9fXqVSYmoqhmY11TZShuTHGjV5Wz");
 
-#[program]
-pub mod olive_dao {
-    use super::*;
+// Fix: Use a single stable connection instance
+const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
 
-    pub fn initialize(ctx: Context<Initialize>) -> Result<()> {
-        let state = &mut ctx.accounts.state;
-        state.authority = ctx.accounts.authority.key();
-        state.proposal_count = 0;
-        Ok(())
+// --- FIXED ANCHOR PROGRAM GETTER ---
+const getProgram = () => {
+    const provider = (window as any).solana;
+    if (!provider) throw new Error("Wallet not found");
+
+    // We MUST pass the 'connection' explicitly to the AnchorProvider
+    const anchorProvider = new anchor.AnchorProvider(
+        connection, 
+        provider, 
+        { preflightCommitment: "confirmed" }
+    );
+    return new anchor.Program(idl as any, anchorProvider);
+};
+
+const updateAll = (className: string, value: string) => {
+    const elements = document.getElementsByClassName(className);
+    for (let i = 0; i < elements.length; i++) (elements[i] as HTMLElement).innerText = value;
+};
+
+// --- GLOBAL FUNCTIONS ---
+
+(window as any).updateUIBalances = async () => {
+    console.log("DEBUG: Refreshing UI Balances...");
+    const provider = (window as any).solana;
+    if (!provider?.isConnected) return;
+
+    const wallet = provider.publicKey;
+    updateAll("val-addr", wallet.toBase58().slice(0, 5));
+    
+    const connectBtn = document.getElementById('connect');
+    if (connectBtn) connectBtn.innerText = "CONNECTED";
+
+    try {
+        const solBal = await connection.getBalance(wallet);
+        updateAll("val-sol", (solBal / LAMPORTS_PER_SOL).toFixed(3));
+
+        const ata = getAssociatedTokenAddressSync(OLV_MINT, wallet);
+        const tokenBal = await connection.getTokenAccountBalance(ata);
+        updateAll("val-olv", (tokenBal.value.uiAmount ?? 0).toFixed(2));
+
+        const vaultSol = await connection.getBalance(DAO_STAKE_VAULT);
+        updateAll("val-tvl", (vaultSol / LAMPORTS_PER_SOL).toFixed(2) + " SOL");
+    } catch (err) {
+        console.warn("DEBUG: Balance sync issue", err);
     }
+};
 
-    pub fn join_dao(ctx: Context<JoinDao>, amount: u64) -> Result<()> {
-        // Price: 0.001 SOL per token (Adjust as needed)
-        // 1 token = 1,000,000,000 lamports (if 9 decimals)
-        let sol_price = amount / 1000; 
+(window as any).renderProposals = async () => {
+    console.log("DEBUG: Fetching Proposals from Chain...");
+    const list = document.getElementById("proposal-list");
+    if (!list) return;
 
-        // 1. Transfer SOL to Treasury
-        let cpi_context = CpiContext::new(
-            ctx.accounts.system_program.to_account_info(),
-            anchor_lang::system_program::Transfer {
-                from: ctx.accounts.user.to_account_info(),
-                to: ctx.accounts.vault.to_account_info(),
-            },
-        );
-        anchor_lang::system_program::transfer(cpi_context, sol_price)?;
-
-        // 2. Mint tokens to user
-        let state_seeds = &[b"state".as_ref(), &[ctx.bumps.state]];
-        let signer = &[&state_seeds[..]];
-
-        let cpi_accounts = MintTo {
-            mint: ctx.accounts.olv_mint.to_account_info(),
-            to: ctx.accounts.user_token_account.to_account_info(),
-            authority: ctx.accounts.state.to_account_info(),
-        };
-        let cpi_program = ctx.accounts.token_program.to_account_info();
-        token::mint_to(CpiContext::new_with_signer(cpi_program, cpi_accounts, signer), amount)?;
-
-        Ok(())
-    }
-
-    pub fn create_proposal(ctx: Context<CreateProposal>, title: String, amount: u64) -> Result<()> {
-        let proposal = &mut ctx.accounts.proposal;
-        let state = &mut ctx.accounts.state;
-        let clock = Clock::get()?;
-
-        proposal.id = state.proposal_count;
-        proposal.creator = ctx.accounts.authority.key();
-        proposal.title = title;
-        proposal.requested_amount = amount;
-        proposal.yes_votes = 0;
-        proposal.no_votes = 0;
-        proposal.executed = false;
-        proposal.created_at = clock.unix_timestamp;
-
-        state.proposal_count += 1;
-        Ok(())
-    }
-
-    pub fn vote(ctx: Context<Vote>, increment_yes: bool) -> Result<()> {
-        let proposal = &mut ctx.accounts.proposal;
-        let clock = Clock::get()?;
-
-        require!(clock.unix_timestamp < proposal.created_at + 86400, OliveError::ProposalExpired);
-
-        let weight = ctx.accounts.voter_token_account.amount;
-        require!(weight > 0, OliveError::NoTokens);
-
-        if increment_yes {
-            proposal.yes_votes += weight;
-        } else {
-            proposal.no_votes += weight;
-        }
-
-        ctx.accounts.vote_record.voted = true;
-        Ok(())
-    }
-
-    pub fn execute_proposal(ctx: Context<ExecuteProposal>) -> Result<()> {
-        let proposal = &mut ctx.accounts.proposal;
+    try {
+        const program = getProgram();
+        // This is where the getProgramAccounts error was occurring
+        const proposals = await program.account.proposal.all();
+        console.log(`DEBUG: Found ${proposals.length} live proposals`);
         
-        require!(proposal.yes_votes > proposal.no_votes, OliveError::ProposalFailed);
-        require!(!proposal.executed, OliveError::AlreadyExecuted);
-
-        let amount = proposal.requested_amount;
-        let vault_info = ctx.accounts.vault.to_account_info();
-        let creator_info = ctx.accounts.creator.to_account_info();
-
-        require!(vault_info.lamports() >= amount, OliveError::InsufficientVaultFunds);
-
-        **vault_info.try_borrow_mut_lamports()? -= amount;
-        **creator_info.try_borrow_mut_lamports()? += amount;
-
-        proposal.executed = true;
-        Ok(())
+        list.innerHTML = ""; 
+        proposals.forEach((p: any) => {
+            const card = document.createElement("div");
+            card.className = "p-6 glass border border-white/10 rounded-[32px] space-y-4 hover:border-green-400/50 transition-all";
+            card.innerHTML = `
+                <div class="flex justify-between items-start">
+                    <h4 class="text-lg font-black italic uppercase">${p.account.title}</h4>
+                    <span class="text-[8px] bg-white/10 px-2 py-1 rounded-md font-mono text-gray-400">${p.publicKey.toBase58().slice(0,6)}</span>
+                </div>
+                <p class="text-gray-500 text-xs leading-relaxed">${p.account.description}</p>
+                <div class="grid grid-cols-2 gap-3 pt-2">
+                    <button onclick="window.castVote('${p.publicKey.toBase58()}', true)" class="bg-green-500/20 text-green-400 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-green-400 hover:text-black transition-all">Yes: ${p.account.votesFor}</button>
+                    <button onclick="window.castVote('${p.publicKey.toBase58()}', false)" class="bg-red-500/20 text-red-400 py-3 rounded-2xl text-[10px] font-black uppercase hover:bg-red-400 hover:text-black transition-all">No: ${p.account.votesAgainst}</button>
+                </div>
+            `;
+            list.appendChild(card);
+        });
+    } catch (err) {
+        console.error("DEBUG: Proposal Render Error", err);
+        list.innerHTML = `<p class="text-red-500 text-xs italic">RPC Error: Unable to fetch accounts.</p>`;
     }
-}
+};
 
-#[derive(Accounts)]
-pub struct Initialize<'info> {
-    #[account(init, payer = authority, space = 8 + 32 + 8, seeds = [b"state"], bump)]
-    pub state: Account<'info, State>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+(window as any).stakeOLV = async () => {
+    const amountStr = (document.getElementById('stake-input') as HTMLInputElement).value;
+    if (!amountStr) return alert("Enter amount");
+    
+    try {
+        console.log(`DEBUG: Staking ${amountStr} OLV...`);
+        const program = getProgram();
+        const amount = new anchor.BN(parseFloat(amountStr) * 1e9); // Adjust for 9 decimals
+        
+        // Replace 'stake' with your actual instruction name from IDL
+        const tx = await program.methods.stake(amount).rpc();
+        console.log("DEBUG: Stake TX Success:", tx);
+        alert("Stake Confirmed!");
+        (window as any).updateUIBalances();
+    } catch (err) {
+        console.error("DEBUG: Stake Error", err);
+    }
+};
 
-#[derive(Accounts)]
-pub struct JoinDao<'info> {
-    #[account(mut, seeds = [b"state"], bump)]
-    pub state: Account<'info, State>,
-    #[account(mut)]
-    /// CHECK:` MINT
-    pub olv_mint: Account<'info, Mint>,
-    #[account(
-        init_if_needed,
-        payer = user,
-        associated_token::mint = olv_mint,
-        associated_token::authority = user
-    )]
-    pub user_token_account: Account<'info, TokenAccount>,
-    #[account(mut, seeds = [b"vault"], bump)]
-    /// CHECK: Treasury
-    pub vault: AccountInfo<'info>,
-    #[account(mut)]
-    pub user: Signer<'info>,
-    pub token_program: Program<'info, Token>,
-    pub associated_token_program: Program<'info, AssociatedToken>,
-    pub system_program: Program<'info, System>,
-}
+(window as any).createProposal = async () => {
+    const title = (document.getElementById('prop-title') as HTMLInputElement).value;
+    const desc = (document.getElementById('prop-desc') as HTMLInputElement).value;
+    if (!title || !desc) return alert("Missing fields");
 
-#[derive(Accounts)]
-pub struct CreateProposal<'info> {
-    #[account(mut, seeds = [b"state"], bump)]
-    pub state: Account<'info, State>,
-    #[account(
-        init, payer = authority, 
-        space = 8 + 8 + 32 + (4 + 64) + 8 + 8 + 8 + 1 + 8, 
-        seeds = [b"proposal", state.proposal_count.to_le_bytes().as_ref()], 
-        bump
-    )]
-    pub proposal: Account<'info, Proposal>,
-    #[account(mut)]
-    pub authority: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+    try {
+        console.log(`DEBUG: Creating Proposal: ${title}`);
+        const program = getProgram();
+        const tx = await program.methods.createProposal(title, desc).rpc();
+        console.log("DEBUG: Proposal TX Success:", tx);
+        alert("Proposal Live on Chain!");
+        (window as any).renderProposals();
+    } catch (err) {
+        console.error("DEBUG: Creation Error", err);
+    }
+};
 
-#[derive(Accounts)]
-pub struct Vote<'info> {
-    #[account(mut)]
-    pub proposal: Account<'info, Proposal>,
-    #[account(init, payer = voter, space = 8 + 1, seeds = [b"vote_record", proposal.key().as_ref(), voter.key().as_ref()], bump)]
-    pub vote_record: Account<'info, VoteRecord>,
-    #[account(constraint = voter_token_account.mint == olv_mint.key())]
-    pub voter_token_account: Account<'info, TokenAccount>,
-    /// CHECK: MINt 
-    pub olv_mint: AccountInfo<'info>,
-    #[account(mut)]
-    pub voter: Signer<'info>,
-    pub system_program: Program<'info, System>,
-}
+(window as any).castVote = async (id: string, side: boolean) => {
+    try {
+        console.log(`DEBUG: Voting ${side} on ${id}`);
+        const program = getProgram();
+        const tx = await program.methods.vote(side).accounts({
+            proposal: new PublicKey(id)
+        }).rpc();
+        console.log("DEBUG: Vote TX Success:", tx);
+        (window as any).renderProposals();
+    } catch (err) {
+        console.error("DEBUG: Vote Error", err);
+    }
+};
 
-#[derive(Accounts)]
-pub struct ExecuteProposal<'info> {
-    #[account(mut)]
-    pub proposal: Account<'info, Proposal>,
-    #[account(mut, seeds = [b"vault"], bump)]
-    /// CHECK: Treasury PDA
-    pub vault: AccountInfo<'info>,
-    #[account(mut)]
-    pub creator: SystemAccount<'info>,
-    pub system_program: Program<'info, System>,
-}
+(window as any).showView = (viewId: string) => {
+    console.log(`DEBUG: Routing to ${viewId}`);
+    const views = ['view-home', 'view-voting', 'view-market', 'view-game'];
+    views.forEach(v => document.getElementById(v)?.classList.add('hidden'));
+    document.getElementById(`view-${viewId}`)?.classList.remove('hidden');
+    
+    if (viewId === 'voting') {
+        (window as any).updateUIBalances();
+        (window as any).renderProposals();
+    }
+};
 
-#[account] pub struct State { pub authority: Pubkey, pub proposal_count: u64 }
-#[account] pub struct VoteRecord { pub voted: bool }
-#[account] pub struct Proposal {
-    pub id: u64, pub creator: Pubkey, pub title: String, 
-    pub requested_amount: u64, pub yes_votes: u64, pub no_votes: u64, 
-    pub executed: bool, pub created_at: i64 
-}
-
-#[error_code]
-pub enum OliveError {
-    #[msg("Voting period has ended")] ProposalExpired,
-    #[msg("No OLV tokens")] NoTokens,
-    #[msg("Proposal failed")] ProposalFailed,
-    #[msg("Already paid")] AlreadyExecuted,
-    #[msg("Vault empty")] InsufficientVaultFunds,
-}
+window.addEventListener('load', async () => {
+    const provider = (window as any).solana;
+    if (provider) {
+        provider.on("connect", () => (window as any).showView('voting'));
+        try { await provider.connect({ onlyIfTrusted: true }); } catch (e) {}
+    }
+    document.getElementById('connect')?.addEventListener('click', async () => {
+        provider?.isConnected ? await provider.disconnect() : await provider.connect();
+    });
+    (window as any).showView('home');
+});

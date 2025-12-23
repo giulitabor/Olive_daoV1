@@ -1,7 +1,7 @@
-import './polyfill'; // MUST BE FIRST
-import { Connection, PublicKey, clusterApiUrl } from "@solana/web3.js";
+import './polyfill'; 
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
-import { getAssociatedTokenAddress, getOrCreateAssociatedTokenAccount, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import idl from "./idl.json";
 
 
@@ -16,44 +16,54 @@ const getProgram = () => {
   return new anchor.Program(idl as any, provider);
 };
 
-// --- UI REFRESH ---
-import { getOrCreateAssociatedTokenAccount } from "@solana/spl-token";
+// --- NAVIGATION LOGIC ---
+(window as any).showView = (view: 'home' | 'voting') => {
+  const home = document.getElementById('view-home')!;
+  const voting = document.getElementById('view-voting')!;
+  
+  if (view === 'voting') {
+    home.classList.add('hidden');
+    voting.classList.remove('hidden');
+    renderProposals();
+    getMintSupply();
+  } else {
+    home.classList.remove('hidden');
+    voting.classList.add('hidden');
+  }
+};
 
+// --- UI UPDATES ---
 async function updateUIBalances() {
   try {
     const program = getProgram();
-    const wallet = program.provider.publicKey!;
+    const wallet = program.provider.publicKey;
     if (!wallet) return;
 
-    // Show/hide admin panel
     const adminPanel = document.getElementById("admin-panel");
     if (adminPanel) adminPanel.style.display = wallet.toBase58() === ADMIN_WALLET ? "block" : "none";
 
-    // Update wallet address
-    document.getElementById("display-address")!.innerText = wallet.toBase58().slice(0, 4) + "..." + wallet.toBase58().slice(-4);
-
-    // SOL balance
+    document.getElementById("display-address")!.innerText = wallet.toBase58();
+    
     const solBal = await connection.getBalance(wallet);
     document.getElementById("display-sol")!.innerText = (solBal / 1e9).toFixed(3);
 
-    // OLV balance
-    const ata = await getOrCreateAssociatedTokenAccount(connection, wallet, OLV_MINT, wallet);
-    const tokenBal = await connection.getTokenAccountBalance(ata.address);
-
-    const OLV_DECIMALS = 6; // Confirm your token decimals
-    const olvAmount = (tokenBal.value.uiAmount || 0) * 10 ** OLV_DECIMALS;
-
-    document.getElementById("wallet-olv")!.innerText = olvAmount.toFixed(0);
-
-    console.log("UI Balances updated. SOL:", solBal / 1e9, "OLV:", olvAmount);
+    const ata = getAssociatedTokenAddressSync(OLV_MINT, wallet);
+    const tokenBal = await connection.getTokenAccountBalance(ata);
+    document.getElementById("display-olv")!.innerText = Math.floor(tokenBal.value.uiAmount || 0).toLocaleString();
   } catch (e) {
-    console.error("Failed to update UI balances:", e);
-    document.getElementById("wallet-olv")!.innerText = "0";
-    document.getElementById("display-sol")!.innerText = "0.000";
+    document.getElementById("display-olv")!.innerText = "0";
   }
 }
 
-// --- PROPOSAL RENDERING ---
+async function getMintSupply() {
+  try {
+    const supply = await connection.getTokenSupply(OLV_MINT);
+    const display = document.getElementById("total-minted");
+    if (display) display.innerText = Math.floor(supply.value.uiAmount || 0).toLocaleString() + " OLV";
+  } catch (e) { console.error("Supply fetch failed"); }
+}
+
+// --- PROPOSAL RENDER ---
 async function renderProposals() {
   const program = getProgram();
   const proposals = await program.account.proposal.all();
@@ -64,186 +74,105 @@ async function renderProposals() {
 
   for (const p of proposals) {
     let hasVoted = false;
-    
     if (voter) {
       const [voteRecordPDA] = PublicKey.findProgramAddressSync(
         [Buffer.from("vote_record"), p.publicKey.toBuffer(), voter.toBuffer()],
         programId
       );
-      try {
-        await program.account.voteRecord.fetch(voteRecordPDA);
-        hasVoted = true;
-      } catch (e) { hasVoted = false; }
+      try { await program.account.voteRecord.fetch(voteRecordPDA); hasVoted = true; } catch (e) { hasVoted = false; }
     }
 
     const expiry = p.account.createdAt.toNumber() + 86400; 
     const isExpired = now > expiry;
 
     const card = document.createElement('div');
-    card.className = "glass p-6 rounded-2xl border border-white/5 space-y-4";
+    card.className = "glass p-6 rounded-2xl border border-white/5 space-y-4 hover:border-green-400/20 transition-all";
     card.innerHTML = `
       <div class="flex justify-between items-start">
         <h3 class="font-black text-lg italic tracking-tighter uppercase">${p.account.title}</h3>
         <span class="text-[9px] px-2 py-1 rounded-md bg-white/5 ${isExpired ? 'text-red-400' : 'text-green-400'}">
-          ${isExpired ? 'CLOSED' : 'VOTING'}
+          ${isExpired ? 'FINALIZED' : 'ACTIVE'}
         </span>
       </div>
-      
       <div class="flex gap-2">
-        <div class="flex-1 bg-black/40 p-3 rounded-xl border border-white/5">
+        <div class="flex-1 bg-black/40 p-3 rounded-xl border border-white/5 text-center">
           <p class="text-[9px] text-gray-500 uppercase">Yes</p>
           <p class="font-bold text-green-400">${(p.account.yesVotes.toNumber() / 1e9).toFixed(0)}</p>
         </div>
-        <div class="flex-1 bg-black/40 p-3 rounded-xl border border-white/5">
+        <div class="flex-1 bg-black/40 p-3 rounded-xl border border-white/5 text-center">
           <p class="text-[9px] text-gray-500 uppercase">No</p>
           <p class="font-bold text-red-400">${(p.account.noVotes.toNumber() / 1e9).toFixed(0)}</p>
         </div>
       </div>
-
-      ${hasVoted ? 
-        `<div class="w-full py-2 bg-green-500/10 text-green-400 text-center rounded-xl text-[10px] font-bold tracking-widest uppercase italic">Vote Recorded ✓</div>` :
+      ${hasVoted ? `<div class="w-full py-2 bg-green-500/10 text-green-400 text-center rounded-xl text-[10px] font-bold uppercase italic">Voted ✓</div>` :
         (!isExpired ? `
           <div class="flex gap-2">
             <button onclick="window.vote('${p.publicKey}', true)" class="flex-1 py-2 bg-white text-black rounded-xl font-bold hover:bg-green-400 transition text-xs">YES</button>
             <button onclick="window.vote('${p.publicKey}', false)" class="flex-1 py-2 border border-white/10 rounded-xl font-bold hover:bg-red-500/20 transition text-xs">NO</button>
-          </div>
-        ` : '')
-      }
-
-      ${isExpired && !p.account.executed ? `
-        <button onclick="window.execute('${p.publicKey}')" class="w-full py-2 bg-green-400 text-black font-bold rounded-xl text-xs">EXECUTE PAYOUT</button>
-      ` : ''}
+          </div>` : '')}
+      ${isExpired && !p.account.executed ? `<button onclick="window.execute('${p.publicKey}')" class="w-full py-2 bg-green-400 text-black font-bold rounded-xl text-xs uppercase">Execute & Payout</button>` : ''}
     `;
     container.appendChild(card);
   }
 }
 
-// --- GLOBAL ACTIONS ---
+// --- GLOBAL HANDLERS ---
 (window as any).vote = async (id: string, side: boolean) => {
-  try {
-    const program = getProgram();
-    const propKey = new PublicKey(id);
-    const voter = program.provider.publicKey!;
-
-    const ata = await getOrCreateAssociatedTokenAccount(connection, voter, OLV_MINT, voter);
-
-    const [rec] = PublicKey.findProgramAddressSync(
-      [Buffer.from("vote_record"), propKey.toBuffer(), voter.toBuffer()],
-      programId
-    );
-
-    console.log("Voting with ATA:", ata.address.toBase58());
-
-    await program.methods.vote(side).accounts({
-      proposal: propKey,
-      voteRecord: rec,
-      voterTokenAccount: ata.address,
-      olvMint: OLV_MINT,
-      voter,
-      systemProgram: anchor.web3.SystemProgram.programId
-    }).rpc();
-
-    console.log("Vote submitted for proposal:", id);
-    await updateUIBalances();
-    await renderProposals();
-  } catch (err: any) {
-    console.error("Voting failed:", err);
-    alert("Voting failed: Do you have enough OLV?");
-  }
+  const program = getProgram();
+  const propKey = new PublicKey(id);
+  const voter = program.provider.publicKey!;
+  const ata = getAssociatedTokenAddressSync(OLV_MINT, voter);
+  const [rec] = PublicKey.findProgramAddressSync([Buffer.from("vote_record"), propKey.toBuffer(), voter.toBuffer()], programId);
+  await program.methods.vote(side).accounts({
+    proposal: propKey, voteRecord: rec, voterTokenAccount: ata, olvMint: OLV_MINT, voter, systemProgram: anchor.web3.SystemProgram.programId
+  }).rpc();
+  renderProposals();
 };
 
 (window as any).joinDao = async () => {
   try {
     const program = getProgram();
     const user = program.provider.publicKey!;
-
     const [state] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
     const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-
-    const ata = await getOrCreateAssociatedTokenAccount(connection, user, OLV_MINT, user);
-
-    const OLV_DECIMALS = 6;
-    const amount = new anchor.BN(100 * 10 ** OLV_DECIMALS); // 100 OLV
-
-    await program.methods.joinDao(amount).accounts({
-      state,
-      olvMint: OLV_MINT,
-      userTokenAccount: ata.address,
-      vault,
-      user,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: anchor.web3.SystemProgram.programId,
+    const ata = getAssociatedTokenAddressSync(OLV_MINT, user);
+    await program.methods.joinDao(new anchor.BN(100 * 1e9)).accounts({
+      state, olvMint: OLV_MINT, userTokenAccount: ata, vault, user,
+      tokenProgram: TOKEN_PROGRAM_ID, associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID, systemProgram: anchor.web3.SystemProgram.programId
     }).rpc();
-
-    alert("Welcome to Olive Tree DAO!");
-    await updateUIBalances();
-
-  } catch (err: any) {
-    console.error("joinDao failed:", err);
-    alert("Join failed: " + err.message);
-  }
-};
-
-(window as any).execute = async (id: string) => {
-  try {
-    const program = getProgram();
-    const propKey = new PublicKey(id);
-    const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-    const data = await program.account.proposal.fetch(propKey);
-    await program.methods.executeProposal().accounts({
-      proposal: propKey, vault, creator: data.creator, systemProgram: anchor.web3.SystemProgram.programId
-    }).rpc();
-    renderProposals();
+    alert("Success! Welcome to the Grove.");
     updateUIBalances();
-  } catch (err: any) { alert("Execution failed: " + err.message); }
+  } catch (err: any) { alert("Join failed: " + err.message); }
 };
 
-// --- INITIALIZATION ---
+// --- APP INITIALIZATION ---
 const init = async () => {
   const provider = (window as any).solana;
 
-  const updateConnectButton = () => {
+  const refreshWalletUI = () => {
     const btn = document.querySelector('#connect');
-    if (btn) btn.innerHTML = provider?.isConnected ? "Disconnect Wallet" : "Connect Wallet";
+    if (btn) btn.innerHTML = provider?.isConnected ? "Disconnect" : "Connect Wallet";
+    if (provider?.isConnected) {
+      updateUIBalances();
+      getMintSupply();
+    } else {
+      (window as any).showView('home'); // Redirect home on disconnect
+    }
   };
 
   if (provider) {
-    provider.on("connect", () => {
-      updateConnectButton();
-      updateUIBalances();
-      renderProposals();
-    });
-
-    provider.on("disconnect", () => {
-      updateConnectButton();
-      document.getElementById("display-address")!.innerText = "--";
-      document.getElementById("display-sol")!.innerText = "0.000";
-      document.getElementById("display-olv")!.innerText = "0";
-    });
-
-    if (provider.isConnected) {
-        updateConnectButton();
-        updateUIBalances();
-        renderProposals();
-    }
+    provider.on("connect", refreshWalletUI);
+    provider.on("disconnect", refreshWalletUI);
+    if (provider.isConnected) refreshWalletUI();
   }
 
-  // EVENT LISTENERS
   document.querySelector('#connect')?.addEventListener('click', async () => {
-    if (provider.isConnected) {
-      await provider.disconnect();
-    } else {
-      await provider.connect();
-    }
+    provider.isConnected ? await provider.disconnect() : await provider.connect();
   });
 
   document.querySelector('#join-dao-btn')?.addEventListener('click', async () => {
-    if (!provider?.isConnected) {
-      await provider.connect();
-    } else {
-      await (window as any).joinDao();
-    }
+    if (!provider?.isConnected) await provider.connect();
+    await (window as any).joinDao();
   });
 
   document.querySelector('#create-btn')?.addEventListener('click', async () => {
@@ -253,41 +182,21 @@ const init = async () => {
     const [state] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
     const stateData = await program.account.state.fetch(state);
     const [prop] = PublicKey.findProgramAddressSync([Buffer.from("proposal"), stateData.proposalCount.toArrayLike(Buffer, "le", 8)], programId);
-    
     await program.methods.createProposal(title, new anchor.BN(parseFloat(amount)*1e9)).accounts({
       state, proposal: prop, authority: program.provider.publicKey, systemProgram: anchor.web3.SystemProgram.programId
     }).rpc();
-    
     renderProposals();
   });
 
+  // Admin Listeners
   document.getElementById("admin-init-btn")?.addEventListener("click", async () => {
-    try {
-      const program = getProgram();
-      const [state] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
-      await program.methods.initialize().accounts({
-        state, authority: program.provider.publicKey, systemProgram: anchor.web3.SystemProgram.programId
-      }).rpc();
-      alert("State Initialized");
-    } catch (err: any) { alert(err.message); }
-  });
-
-  document.getElementById("admin-vault-btn")?.addEventListener("click", async () => {
-    try {
-      const program = getProgram();
-      const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-      const tx = new anchor.web3.Transaction().add(
-        anchor.web3.SystemProgram.transfer({ fromPubkey: program.provider.publicKey, toPubkey: vault, lamports: 0.1 * 1e9 })
-      );
-      await program.provider.sendAndConfirm(tx);
-      alert("Vault Funded");
-    } catch (err: any) { alert(err.message); }
+    const program = getProgram();
+    const [state] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
+    await program.methods.initialize().accounts({ state, authority: program.provider.publicKey, systemProgram: anchor.web3.SystemProgram.programId }).rpc();
+    alert("DAO State Initialized.");
   });
 };
 
-// --- START APP ---
-if (document.readyState === 'complete' || document.readyState === 'interactive') {
-  init();
-} else {
-  window.addEventListener('load', init);
-}
+if (document.readyState === 'complete' || document.readyState === 'interactive') { init(); } 
+else { window.addEventListener('load', init); }
+

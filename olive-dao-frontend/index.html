@@ -7,99 +7,106 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="stylesheet" href="style.css">
 </head>
-<body class="bg-black text-white font-sans selection:bg-green-500 selection:text-black">
+<body class="bg-black text-white font-sans selection:bg-green-500 selection:text-black overflow-x-hidden">
 
   <div class="fixed top-0 left-0 w-full h-full overflow-hidden -z-10">
     <div class="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-emerald-900/20 blur-[120px] rounded-full"></div>
     <div class="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-green-900/10 blur-[100px] rounded-full"></div>
   </div>
 
-  <header class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
+  <nav class="fixed top-0 w-full z-50 glass border-b border-white/5 px-6 py-4 flex justify-between items-center">
+    <div class="font-black italic tracking-tighter text-xl cursor-pointer hover:text-green-400 transition" onclick="window.showView('home')">
+      OLIVE <span class="text-green-400">DAO</span>
+    </div>
+    <div class="hidden md:flex gap-8 text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400">
+      <a href="javascript:void(0)" onclick="window.showView('home')" class="hover:text-green-400 transition">Home</a>
+      <a href="javascript:void(0)" onclick="window.showView('voting')" class="hover:text-green-400 transition">Governance</a>
+      <a href="#" class="hover:text-green-400 opacity-30 cursor-not-allowed">Marketplace</a>
+    </div>
+    <button id="connect" class="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all">
+      Connect Wallet
+    </button>
+  </nav>
+
+  <section id="view-home" class="min-h-screen flex flex-col items-center justify-center p-6 text-center">
     <div class="glass p-10 md:p-16 rounded-[40px] max-w-3xl w-full border border-white/10 shadow-2xl relative">
       <div class="inline-block px-4 py-1 rounded-full bg-green-500/10 border border-green-500/20 text-green-400 text-[10px] font-bold tracking-[0.2em] uppercase mb-6">
-        Established 2025 • Devnet v1.0
+        Devnet v1.0 • Phase 1
       </div>
-
-      <h1 class="text-6xl md:text-8xl font-black tracking-tighter mb-4 italic leading-none">
-        OLIVE TREE <span class="text-transparent bg-clip-text bg-gradient-to-br from-green-300 to-emerald-600">DAO</span>
+      <h1 class="text-6xl md:text-8xl font-black mb-4 italic leading-none">
+        PLANT <span class="text-transparent bg-clip-text bg-gradient-to-br from-green-300 to-emerald-600">FUTURE</span>
       </h1>
-      
       <p class="text-gray-400 text-lg md:text-xl max-w-xl mx-auto mb-10 leading-relaxed">
-        Decentralized reforestation meets blockchain governance. Plant trees, earn revenue, and vote on the future of our groves.
+        The first decentralized protocol governing real-world olive groves. Join the DAO to earn revenue and vote on global reforestation.
       </p>
-      
-      <button id="join-dao-btn" class="group relative bg-green-400 hover:bg-green-300 text-black font-black py-5 px-12 rounded-2xl transition-all transform hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(0,255,163,0.3)] mb-10 text-lg">
-        JOIN DAO & MINT 100 OLV
+      <button id="join-dao-btn" class="group relative bg-green-400 hover:bg-green-300 text-black font-black py-5 px-12 rounded-2xl transition-all transform hover:scale-105 active:scale-95 shadow-[0_0_30px_rgba(0,255,163,0.3)] mb-10 text-lg uppercase">
+        Join DAO & Mint 100 OLV
       </button>
-
       <div class="flex flex-wrap justify-center gap-x-8 gap-y-4 text-[11px] font-bold uppercase tracking-widest text-gray-500">
-        <a href="#" class="hover:text-green-400 transition-colors">Whitepaper</a>
-        <a href="#" class="hover:text-green-400 transition-colors">Tree Market</a>
-        <a href="#" class="hover:text-green-400 transition-colors">WebGame</a>
-        <a href="#" class="hover:text-green-400 transition-colors">Legal & ToC</a>
+        <a href="#" class="hover:text-green-400 transition">Whitepaper</a>
+        <a href="#" class="hover:text-green-400 transition">WebGame</a>
+        <a href="#" class="hover:text-green-400 transition">ToC</a>
       </div>
     </div>
-  </header>
+  </section>
 
-  <main class="max-w-6xl mx-auto p-6 pb-24">
+  <section id="view-voting" class="hidden min-h-screen pt-32 p-6 max-w-7xl mx-auto">
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
       <div class="lg:col-span-4 space-y-6">
-        <div class="glass p-8 rounded-3xl border border-white/5 relative overflow-hidden">
-          <button id="connect" class="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl font-bold transition-all mb-8">
-            Connect Wallet
-          </button>
-          
+        <div class="glass p-8 rounded-3xl border border-white/5">
+          <h4 class="text-[10px] uppercase text-gray-500 font-bold mb-6 tracking-widest text-center">Protocol Identity</h4>
           <div class="space-y-6">
-            <div class="flex flex-col">
-              <span class="text-[10px] uppercase text-gray-500 font-bold mb-1">Identity</span>
-              <span id="display-address" class="font-mono text-sm truncate">--</span>
+            <div class="flex flex-col border-b border-white/5 pb-4 text-center">
+              <span class="text-[10px] text-gray-500 mb-1 uppercase">Address</span>
+              <span id="display-address" class="font-mono text-xs truncate tracking-tighter italic">--</span>
             </div>
-		<div class="flex flex-col">
-                <span class="text-[10px] uppercase text-gray-500 font-bold mb-1">Staked OLV</span>
-		<!-- Replace old display-olv -->
-		<span id="staked-olv" class="text-2xl font-black text-emerald-400">0</span>
-
-
-              </div><div class="flex flex-col">
-                <span class="text-[10px] uppercase text-gray-500 font-bold mb-1">Your OLV Balance</span>
-		<span id="wallet-olv" class="text-2xl font-black text-emerald-400">0</span>
-              </div>
             <div class="grid grid-cols-2 gap-4">
-              <div class="flex flex-col">
-                <span class="text-[10px] uppercase text-gray-500 font-bold mb-1">Sol Balance</span>
-                <span id="display-sol" class="text-2xl font-black text-green-400">0.00</span>
+              <div class="text-center">
+                <span class="text-[9px] text-gray-500 uppercase">SOL</span>
+                <p id="display-sol" class="text-xl font-black text-green-400">0.00</p>
+              </div>
+              <div class="text-center border-l border-white/5">
+                <span class="text-[9px] text-gray-500 uppercase">OLV Stake</span>
+                <p id="display-olv" class="text-xl font-black text-emerald-400">0</p>
               </div>
             </div>
           </div>
-    
+        </div>
+
         <div id="admin-panel" style="display: none;" class="glass p-6 rounded-3xl border border-red-500/20 bg-red-500/5">
-          <h4 class="text-red-400 font-bold text-xs uppercase mb-4 tracking-widest">🛡️ Authority Control</h4>
-          <div class="grid grid-cols-1 gap-2">
-            <button id="admin-init-btn" class="text-[10px] font-bold py-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg transition">INIT DAO STATE</button>
-            <button id="admin-vault-btn" class="text-[10px] font-bold py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition">FUND VAULT (0.1 SOL)</button>
+          <h4 class="text-red-400 font-bold text-[10px] uppercase mb-4 tracking-widest text-center">🛡️ Authority Panel</h4>
+          <div class="space-y-4">
+             <div class="text-center border-b border-red-500/10 pb-4">
+                <span class="text-[9px] text-red-400/50 uppercase">Total OLV Supply</span>
+                <p id="total-minted" class="text-xl font-bold italic">--</p>
+             </div>
+            <button id="admin-init-btn" class="w-full text-[10px] font-bold py-2 bg-red-500/20 hover:bg-red-500/40 rounded-lg transition">Initialize State</button>
+            <button id="admin-vault-btn" class="w-full text-[10px] font-bold py-2 border border-red-500/20 rounded-lg hover:bg-red-500/10 transition">Fund Vault (0.1 SOL)</button>
           </div>
         </div>
       </div>
 
       <div class="lg:col-span-8 space-y-8">
-        <div class="flex justify-between items-end">
-          <h2 class="text-4xl font-black italic tracking-tighter">VOTING <span class="text-gray-600 font-normal">PORTAL</span></h2>
-          <div class="flex gap-2">
-            <input type="text" id="title-input" placeholder="Title" class="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-400/50">
+        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+          <h2 class="text-4xl font-black italic tracking-tighter">GOVERNANCE <span class="text-gray-600 font-normal">PORTAL</span></h2>
+          <div class="flex gap-2 w-full md:w-auto">
+            <input type="text" id="title-input" placeholder="Proposal Title" class="flex-grow bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-400/50">
             <input type="number" id="amount-input" placeholder="SOL" class="w-20 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-green-400/50">
-            <button id="create-btn" class="bg-white text-black font-bold px-6 py-2 rounded-xl hover:bg-green-400 transition">POST</button>
+            <button id="create-btn" class="bg-white text-black font-bold px-6 py-2 rounded-xl hover:bg-green-400 transition shadow-lg">POST</button>
           </div>
         </div>
         
-        <div id="proposal-list" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+        <div id="proposal-list" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+          </div>
       </div>
     </div>
   </main>
 
   <footer class="p-12 text-center text-gray-600 text-[10px] uppercase tracking-[0.5em]">
-    Olive Tree DAO • Powered by Solana
+    Olive Tree DAO • Phase 1 Complete
   </footer>
-<script type="module" src="/src/main.ts"></script>
+
+  <script type="module" src="/src/main.ts"></script>
 </body>
 </html>

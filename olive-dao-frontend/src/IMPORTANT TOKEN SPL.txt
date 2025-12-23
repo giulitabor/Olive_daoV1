@@ -26,6 +26,7 @@ Updating 6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA
 Signature: xYbKc2X1hg6rL6g65NDHtSXvfZTpiL8Nx4CzioqdKmHCxtXSrgMPFXdoRzNpiynWYLQKAxL8Qyqmdj8Yo9hn8eV
 
 DEV WALLET : 8xkNHk2VpWBM6Nk3enitFCs7vwh2inCveTNintcXHc54
+DAO WALLET : FrNP32Hxhuu4pS8yguHhtTEdU9QpU7odRYi5zKNps15N
 
 
 
