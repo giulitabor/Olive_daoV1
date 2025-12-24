@@ -8,6 +8,9 @@
   "instructions": [
     {
       "name": "create_proposal",
+      "docs": [
+        "3. Create a proposal for funding"
+      ],
       "discriminator": [
         132,
         116,
@@ -86,6 +89,9 @@
     },
     {
       "name": "execute_proposal",
+      "docs": [
+        "5. Execute proposal and pay out SOL to the creator"
+      ],
       "discriminator": [
         186,
         60,
@@ -132,6 +138,9 @@
     },
     {
       "name": "initialize",
+      "docs": [
+        "1. Initialize the global DAO state"
+      ],
       "discriminator": [
         175,
         175,
@@ -175,6 +184,9 @@
     },
     {
       "name": "join_dao",
+      "docs": [
+        "2. Join DAO: Users pay SOL to the treasury and receive OLV tokens"
+      ],
       "discriminator": [
         43,
         206,
@@ -343,6 +355,9 @@
     },
     {
       "name": "vote",
+      "docs": [
+        "4. Vote on a proposal (Power = Wallet Balance)"
+      ],
       "discriminator": [
         227,
         110,
@@ -464,22 +479,22 @@
     {
       "code": 6001,
       "name": "NoTokens",
-      "msg": "No OLV tokens"
+      "msg": "No OLV tokens in wallet"
     },
     {
       "code": 6002,
       "name": "ProposalFailed",
-      "msg": "Proposal failed"
+      "msg": "Proposal did not pass"
     },
     {
       "code": 6003,
       "name": "AlreadyExecuted",
-      "msg": "Already paid"
+      "msg": "Payout already executed"
     },
     {
       "code": 6004,
       "name": "InsufficientVaultFunds",
-      "msg": "Vault empty"
+      "msg": "Treasury vault has insufficient SOL"
     }
   ],
   "types": [

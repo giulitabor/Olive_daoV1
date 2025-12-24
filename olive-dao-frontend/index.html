@@ -21,7 +21,8 @@
     <div class="hidden md:flex gap-8 text-[10px] font-bold uppercase tracking-[0.3em] text-gray-400">
       <a href="javascript:void(0)" onclick="window.showView('home')" class="hover:text-green-400 transition">Home</a>
       <a href="javascript:void(0)" onclick="window.showView('voting')" class="hover:text-green-400 transition">Governance</a>
-      <a href="#" class="hover:text-green-400 opacity-30 cursor-not-allowed">Marketplace</a>
+      <a href="javascript:void(0)" onclick="window.showView('whitepaper')" class="hover:text-green-400 transition">Whitepaper</a>
+      <a href="javascript:void(0)" onclick="window.showView('game')" class="hover:text-green-400 transition">WebGame</a>
     </div>
     <button id="connect" class="bg-white/5 hover:bg-white/10 border border-white/10 px-6 py-2 rounded-xl font-bold text-[10px] uppercase tracking-widest transition-all">
       Connect Wallet
@@ -49,28 +50,125 @@
       </div>
     </div>
   </section>
+	<section id="view-whitepaper" class="hidden p-6 max-w-4xl mx-auto space-y-12 pb-24">
+      <div class="border-l-4 border-green-500 pl-6">
+        <h2 class="text-5xl font-black italic uppercase">Whitepaper v1.0</h2>
+        <p class="text-gray-500 font-mono text-sm uppercase tracking-widest mt-2">Olive Tree DAO Protocol Architecture</p>
+      </div>
 
-  <section id="view-voting" class="hidden min-h-screen pt-32 p-6 max-w-7xl mx-auto">
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      
-      <div class="lg:col-span-4 space-y-6">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
         <div class="glass p-8 rounded-3xl border border-white/5">
-          <h4 class="text-[10px] uppercase text-gray-500 font-bold mb-6 tracking-widest text-center">Protocol Identity</h4>
-          <div class="space-y-6">
-            <div class="flex flex-col border-b border-white/5 pb-4 text-center">
-              <span class="text-[10px] text-gray-500 mb-1 uppercase">Address</span>
-              <span id="display-address" class="font-mono text-xs truncate tracking-tighter italic">--</span>
+          <h3 class="text-green-400 font-bold mb-4 uppercase text-xs">Tokenomics</h3>
+          <p class="text-sm text-gray-400 leading-relaxed">
+            The <strong>OLV</strong> token is an SPL asset with a fixed supply of <span class="text-white">10,000,000</span>. 
+            It represents governance weight and pro-rata ownership of physical olive tree assets.
+          </p>
+        </div>
+        <div class="glass p-8 rounded-3xl border border-white/5">
+          <h3 class="text-green-400 font-bold mb-4 uppercase text-xs">Revenue Streams</h3>
+          <ul class="text-sm text-gray-400 space-y-2 list-disc pl-4">
+            <li>60% Harvest Revenue (Olive Oil Sales)</li>
+            <li>Carbon Credit Sequestration Dividends</li>
+            <li>Precision Agronomy Data Licensing</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="glass p-8 rounded-3xl border border-white/5">
+        <h3 class="text-green-400 font-bold mb-4 uppercase text-xs">Edge/Physical Layer</h3>
+        <p class="text-sm text-gray-400 leading-relaxed font-mono">
+          Sensors: Weather Stations, Soil Moisture, CO₂ Flux, Ultrasonic height. <br>
+          Compute: Raspberry Pi + ESP32 edge nodes signing data for IPFS & On-Chain Oracles.
+        </p>
+      </div>
+    </section>
+	
+	<section id="view-game" class="hidden min-h-[70vh] flex flex-col items-center justify-center p-6 text-center">
+        <div class="w-24 h-24 bg-green-500/20 rounded-full flex items-center justify-center animate-pulse mb-8">
+            <span class="text-4xl">🌱</span>
+        </div>
+        <h2 class="text-5xl font-black italic uppercase mb-4">The Grove Manager</h2>
+        <p class="text-gray-500 tracking-[0.5em] uppercase text-xs font-bold">Coming Soon • Phase 2</p>
+        <p class="mt-6 text-gray-400 max-w-md">Play-to-Earn simulation using real-time field data. Manage your digital trees to optimize real-world yield.</p>
+    </section>
+
+<div class="lg:col-span-12 mb-8">
+    <div class="glass p-6 rounded-[30px] border border-white/5 flex flex-wrap justify-around items-center gap-8 bg-gradient-to-r from-green-500/5 to-cyan-500/5">
+        <div class="text-center">
+            <span class="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Total SOL Treasury</span>
+            <p class="text-3xl font-black italic text-white mt-1"> 
+                <span id="vault-balance">0.00</span>
+                <span class="text-sm text-gray-600">SOL</span>
+            </p>
+        </div>
+        
+        <div class="h-12 w-[1px] bg-white/5 hidden md:block"></div>
+
+        <div class="text-center">
+            <span class="text-[10px] text-green-500 uppercase tracking-widest font-bold">Total OLV Staked</span>
+            <p class="text-3xl font-black italic text-green-400 mt-1">
+                <span id="total-staked">0</span> 
+                <span class="text-sm text-gray-600">OLV</span>
+            </p>
+        </div>
+
+        <div class="h-12 w-[1px] bg-white/5 hidden md:block"></div>
+
+        <div class="text-center">
+            <span class="text-[10px] text-cyan-400 uppercase tracking-widest font-bold">Protocol Health</span>
+            <p class="text-xl font-black italic text-white mt-1 uppercase">Operational</p>
+        </div>
+    </div>
+<div class="glass p-8 rounded-[2rem] border border-white/5 bg-gradient-to-b from-white/[0.02] to-transparent">
+        <h4 class="text-[10px] uppercase text-green-400 font-bold mb-6 tracking-[0.2em] flex items-center gap-2">
+            <span class="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></span>
+            Live Portfolio <p class="text-[9px] text-gray-600 uppercase mb-2">Connected Wallet</p>
+            <p id="display-address" class="font-mono text-[10px] text-gray-400 truncate bg-black/20 p-2 rounded-lg italic">--</p>
+
+        </h4>
+        
+        <div class="space-y-4">
+            <div class="bg-black/40 rounded-2xl p-4 border border-white/5 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] text-gray-500 uppercase font-bold">Solana</p>
+                    <p id="display-sol" class="text-2xl font-black italic text-white">0.00</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] text-gray-600">NATIVE</p>
+                </div>
             </div>
-            <div class="grid grid-cols-2 gap-4">
-              <div class="text-center">
-                <span class="text-[9px] text-gray-500 uppercase">SOL</span>
-                <p id="display-sol" class="text-xl font-black text-green-400">0.00</p>
-              </div>
-              <div class="text-center border-l border-white/5">
-                <span class="text-[9px] text-gray-500 uppercase">OLV Stake</span>
-                <p id="display-olv" class="text-xl font-black text-emerald-400">0</p>
-              </div>
+
+            <div class="bg-black/40 rounded-2xl p-4 border border-white/5 flex justify-between items-center">
+                <div>
+                    <p class="text-[10px] text-emerald-500 uppercase font-bold">Olive Token</p>
+                    <p id="display-olv" class="text-2xl font-black italic text-emerald-400">0</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[9px] text-gray-600">SPL</p>
+                </div>
             </div>
+
+</div>
+
+<div class="bg-white/5 rounded-2xl p-4 text-center border border-white/5">
+    <span class="text-[9px] text-emerald-500 font-bold uppercase tracking-widest">Your Active Stake</span>
+    <p class="text-3xl font-black italic">
+        <span id="user-staked-display">0</span> 
+        <span class="text-xs text-gray-600 font-normal">OLV</span>
+    </p>
+</div>
+            <div class="space-y-3 pt-2">
+                <div class="relative">
+                    <input type="number" id="stake-amount" placeholder="Amount to Stake" 
+                        class="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-green-400 transition-all">
+                    <span class="absolute right-4 top-3.5 text-[10px] font-bold text-gray-600 uppercase">OLV</span>
+                </div>
+                <button onclick="window.stakeOLV()" class="w-full bg-green-500 hover:bg-green-400 text-black font-black py-3 rounded-xl transition-all transform active:scale-95 text-[11px] uppercase tracking-tighter shadow-lg">
+                    Confirm Governance Stake
+                </button>
+                <p class="text-[8px] text-gray-600 text-center uppercase tracking-tighter">Staked tokens are locked for 48h after voting</p>
+            </div>
+        </div>
           </div>
         </div>
 

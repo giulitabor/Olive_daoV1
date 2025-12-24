@@ -1,5 +1,5 @@
 {
-  "address": "B3EdVG6FJndxAemD9fXqVSYmoqhmY11TZShuTHGjV5Wz",
+  "address": "8MdiqqhZj1badeLArqCmZWeiWGK8tXQWiydRLcqzDn45",
   "metadata": {
     "name": "olive_dao",
     "version": "0.1.0",
@@ -20,18 +20,16 @@
       ],
       "accounts": [
         {
-          "name": "state",
+          "name": "dao",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  115,
-                  116,
+                  100,
                   97,
-                  116,
-                  101
+                  111
                 ]
               }
             ]
@@ -40,31 +38,10 @@
         {
           "name": "proposal",
           "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  112,
-                  114,
-                  111,
-                  112,
-                  111,
-                  115,
-                  97,
-                  108
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "state.proposal_count",
-                "account": "State"
-              }
-            ]
-          }
+          "signer": true
         },
         {
-          "name": "authority",
+          "name": "creator",
           "writable": true,
           "signer": true
         },
@@ -75,9 +52,130 @@
       ],
       "args": [
         {
-          "name": "title",
+          "name": "description",
           "type": "string"
         },
+        {
+          "name": "duration",
+          "type": "i64"
+        },
+        {
+          "name": "payout",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "execute",
+      "discriminator": [
+        130,
+        221,
+        242,
+        154,
+        13,
+        193,
+        189,
+        29
+      ],
+      "accounts": [
+        {
+          "name": "dao",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  111
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "proposal",
+          "writable": true
+        },
+        {
+          "name": "authority",
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "recipient",
+          "writable": true
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "fund_vault",
+      "docs": [
+        "2. Fund the vault directly (Donations)"
+      ],
+      "discriminator": [
+        26,
+        33,
+        207,
+        242,
+        119,
+        108,
+        134,
+        73
+      ],
+      "accounts": [
+        {
+          "name": "funder",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
         {
           "name": "amount",
           "type": "u64"
@@ -85,81 +183,39 @@
       ]
     },
     {
-      "name": "execute_proposal",
+      "name": "init_dao",
+      "docs": [
+        "1. Initialize the global DAO state and Vault"
+      ],
       "discriminator": [
-        186,
-        60,
-        116,
-        133,
-        108,
-        128,
-        111,
-        28
+        164,
+        105,
+        97,
+        240,
+        173,
+        0,
+        112,
+        0
       ],
       "accounts": [
         {
-          "name": "proposal",
-          "writable": true
-        },
-        {
-          "name": "vault",
+          "name": "dao",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  118,
+                  100,
                   97,
-                  117,
-                  108,
-                  116
+                  111
                 ]
               }
             ]
           }
         },
         {
-          "name": "creator",
-          "writable": true
-        },
-        {
-          "name": "system_program",
-          "address": "11111111111111111111111111111111"
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "initialize",
-      "discriminator": [
-        175,
-        175,
-        109,
-        31,
-        13,
-        152,
-        155,
-        237
-      ],
-      "accounts": [
-        {
-          "name": "state",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  115,
-                  116,
-                  97,
-                  116,
-                  101
-                ]
-              }
-            ]
-          }
+          "name": "stake_mint"
         },
         {
           "name": "authority",
@@ -167,6 +223,24 @@
           "signer": true
         },
         {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              }
+            ]
+          }
+        },
+        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
         }
@@ -174,128 +248,35 @@
       "args": []
     },
     {
-      "name": "join_dao",
+      "name": "stake",
+      "docs": [
+        "3. Stake tokens + Pay 0.01 SOL Treasury Fee"
+      ],
       "discriminator": [
-        43,
         206,
-        228,
-        66,
-        82,
-        56,
-        96,
-        196
+        176,
+        202,
+        18,
+        200,
+        209,
+        179,
+        108
       ],
       "accounts": [
         {
-          "name": "state",
+          "name": "dao",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  115,
-                  116,
+                  100,
                   97,
-                  116,
-                  101
+                  111
                 ]
               }
             ]
-          }
-        },
-        {
-          "name": "olv_mint",
-          "writable": true
-        },
-        {
-          "name": "user_token_account",
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "account",
-                "path": "user"
-              },
-              {
-                "kind": "const",
-                "value": [
-                  6,
-                  221,
-                  246,
-                  225,
-                  215,
-                  101,
-                  161,
-                  147,
-                  217,
-                  203,
-                  225,
-                  70,
-                  206,
-                  235,
-                  121,
-                  172,
-                  28,
-                  180,
-                  133,
-                  237,
-                  95,
-                  91,
-                  55,
-                  145,
-                  58,
-                  140,
-                  245,
-                  133,
-                  126,
-                  255,
-                  0,
-                  169
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "olv_mint"
-              }
-            ],
-            "program": {
-              "kind": "const",
-              "value": [
-                140,
-                151,
-                37,
-                143,
-                78,
-                36,
-                137,
-                241,
-                187,
-                61,
-                16,
-                41,
-                20,
-                142,
-                13,
-                131,
-                11,
-                90,
-                19,
-                153,
-                218,
-                255,
-                16,
-                132,
-                4,
-                142,
-                123,
-                216,
-                219,
-                233,
-                248,
-                89
-              ]
-            }
           }
         },
         {
@@ -315,6 +296,63 @@
               }
             ]
           }
+        },
+        {
+          "name": "stake_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_mint"
+        },
+        {
+          "name": "user_token",
+          "writable": true
         },
         {
           "name": "user",
@@ -326,12 +364,108 @@
           "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         },
         {
-          "name": "associated_token_program",
-          "address": "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
-        },
-        {
           "name": "system_program",
           "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "unstake",
+      "discriminator": [
+        90,
+        95,
+        107,
+        42,
+        205,
+        124,
+        50,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "dao",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  100,
+                  97,
+                  111
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_account",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "stake_vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101,
+                  95,
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "user"
+              }
+            ]
+          }
+        },
+        {
+          "name": "user_token",
+          "writable": true
+        },
+        {
+          "name": "user",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
         }
       ],
       "args": [
@@ -357,6 +491,27 @@
         {
           "name": "proposal",
           "writable": true
+        },
+        {
+          "name": "stake_account",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  116,
+                  97,
+                  107,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "voter"
+              }
+            ]
+          }
         },
         {
           "name": "vote_record",
@@ -391,12 +546,6 @@
           }
         },
         {
-          "name": "voter_token_account"
-        },
-        {
-          "name": "olv_mint"
-        },
-        {
           "name": "voter",
           "writable": true,
           "signer": true
@@ -408,13 +557,26 @@
       ],
       "args": [
         {
-          "name": "increment_yes",
+          "name": "support",
           "type": "bool"
         }
       ]
     }
   ],
   "accounts": [
+    {
+      "name": "Dao",
+      "discriminator": [
+        163,
+        9,
+        47,
+        31,
+        52,
+        85,
+        197,
+        49
+      ]
+    },
     {
       "name": "Proposal",
       "discriminator": [
@@ -429,16 +591,16 @@
       ]
     },
     {
-      "name": "State",
+      "name": "StakeAccount",
       "discriminator": [
-        216,
-        146,
-        107,
-        94,
-        104,
-        75,
-        182,
-        177
+        80,
+        158,
+        67,
+        124,
+        50,
+        189,
+        192,
+        255
       ]
     },
     {
@@ -458,51 +620,86 @@
   "errors": [
     {
       "code": 6000,
-      "name": "ProposalExpired",
-      "msg": "Voting period has ended"
+      "name": "VotingClosed",
+      "msg": "Voting closed"
     },
     {
       "code": 6001,
-      "name": "NoTokens",
-      "msg": "No OLV tokens"
+      "name": "NoStake",
+      "msg": "No stake"
     },
     {
       "code": 6002,
-      "name": "ProposalFailed",
-      "msg": "Proposal failed"
+      "name": "InsufficientStake",
+      "msg": "Insufficient stake"
     },
     {
       "code": 6003,
       "name": "AlreadyExecuted",
-      "msg": "Already paid"
+      "msg": "Already executed"
     },
     {
       "code": 6004,
-      "name": "InsufficientVaultFunds",
+      "name": "TimelockActive",
+      "msg": "Timelock active"
+    },
+    {
+      "code": 6005,
+      "name": "ProposalRejected",
+      "msg": "Rejected"
+    },
+    {
+      "code": 6006,
+      "name": "Unauthorized",
+      "msg": "Unauthorized"
+    },
+    {
+      "code": 6007,
+      "name": "VaultEmpty",
       "msg": "Vault empty"
     }
   ],
   "types": [
+    {
+      "name": "Dao",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "authority",
+            "type": "pubkey"
+          },
+          {
+            "name": "stake_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_staked",
+            "type": "u64"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
     {
       "name": "Proposal",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "id",
-            "type": "u64"
+            "name": "dao",
+            "type": "pubkey"
           },
           {
             "name": "creator",
             "type": "pubkey"
           },
           {
-            "name": "title",
+            "name": "description",
             "type": "string"
-          },
-          {
-            "name": "requested_amount",
-            "type": "u64"
           },
           {
             "name": "yes_votes",
@@ -513,28 +710,44 @@
             "type": "u64"
           },
           {
-            "name": "executed",
-            "type": "bool"
+            "name": "start_ts",
+            "type": "i64"
           },
           {
-            "name": "created_at",
+            "name": "end_ts",
             "type": "i64"
+          },
+          {
+            "name": "execute_after",
+            "type": "i64"
+          },
+          {
+            "name": "payout",
+            "type": "u64"
+          },
+          {
+            "name": "executed",
+            "type": "bool"
           }
         ]
       }
     },
     {
-      "name": "State",
+      "name": "StakeAccount",
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "authority",
+            "name": "owner",
             "type": "pubkey"
           },
           {
-            "name": "proposal_count",
+            "name": "amount",
             "type": "u64"
+          },
+          {
+            "name": "last_update",
+            "type": "i64"
           }
         ]
       }
