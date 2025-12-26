@@ -8,6 +8,7 @@ export default defineConfig({
         Buffer: true, // This is the critical line
         global: true,
         process: true,
+	host: true,
       },
     }),
   ],

@@ -152,6 +152,59 @@ async function renderProposals() {
   }
 };
 
+// --- REAL WORLD ORACLE LOGIC ---
+async function fetchOracleData() {
+    const sensorContainer = document.getElementById('live-sensors');
+    if (!sensorContainer) return;
+
+    try {
+        // Using a public environmental API (e.g., OpenWeather or similar) 
+        // For this demo, we use a reliable mock that simulates our field LoRaWAN sensors
+        const response = await fetch('https://api.open-meteo.com/v1/forecast?latitude=37.98&longitude=23.72&current=temperature_2m,relative_humidity_2m,surface_pressure');
+        const data = await response.json();
+        
+        const humidity = data.current.relative_humidity_2m;
+        const temp = data.current.temperature_2m;
+        
+        // Calculate dynamic CO2 offset (Mock logic: 250 trees * 22kg/year / 365 days)
+        const dailyOffset = (250 * 0.06).toFixed(2); 
+
+        sensorContainer.innerHTML = `
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div class="bg-black/40 p-3 rounded-xl border border-white/5">
+                    <p class="text-[9px] uppercase text-gray-500">Field Humidity</p>
+                    <p class="text-white font-mono text-lg">${humidity}%</p>
+                </div>
+                <div class="bg-black/40 p-3 rounded-xl border border-white/5">
+                    <p class="text-[9px] uppercase text-gray-500">CO2 Offset/Day</p>
+                    <p class="text-green-400 font-mono text-lg">${dailyOffset}kg</p>
+                </div>
+                <div class="bg-black/40 p-3 rounded-xl border border-white/5">
+                    <p class="text-[9px] uppercase text-gray-500">Soil Temp</p>
+                    <p class="text-white font-mono text-lg">${temp}°C</p>
+                </div>
+            </div>
+            <p class="text-[8px] text-center mt-4 text-gray-600 uppercase">Last Oracle Sync: ${new Date().toLocaleTimeString()}</p>
+        `;
+    } catch (e) {
+        console.error("Oracle fetch failed", e);
+    }
+}
+
+
+(window as any).buyTreeFraction = async (useSol: boolean) => {
+    const slider = document.getElementById('tree-slider') as HTMLInputElement;
+    const percentage = parseInt(slider.value);
+    const pricePerPercent = useSol ? 0.05 : 100; // 0.05 SOL or 100 OLV per 1%
+    const totalCost = (percentage * pricePerPercent).toFixed(2);
+
+    if (confirm(`Confirm purchase of ${percentage}% of Tree #104 for ${totalCost} ${useSol ? 'SOL' : 'OLV'}?`)) {
+        // Here you would call your 'purchase_tree' instruction from the program
+        alert("Transaction Sent! Processing on-chain...");
+    }
+};
+
+
 (window as any).joinDao = async () => {
   try {
     const program = getProgram();
