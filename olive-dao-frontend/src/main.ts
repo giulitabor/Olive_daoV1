@@ -150,139 +150,98 @@ let currentTab = 'active';
     const user = (window as any).solana?.publicKey; 
     if (!container) return;
 
-    // 1. Show Professional Loading State
-    container.innerHTML = `
-        <div class="flex flex-col items-center py-20 gap-4">
-            <div class="spinner"></div>
-            <p class="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] animate-pulse">Syncing Ledger...</p>
-        </div>
-    `;
+    // Loading State
+    container.innerHTML = `<div class="text-center py-20 animate-pulse text-[10px] font-black uppercase text-gray-500">Syncing Ledger...</div>`;
 
     try {
         const program = getProgram();
         const now = Math.floor(Date.now() / 1000);
-        const activeTab = (window as any).currentTab || 'active';
-        
-        // Single RPC call to get all proposals
         const proposals = await program.account.proposal.all();
         
-        // Sort: Newest First
-        proposals.sort((a: any, b: any) => b.account.endTs.toNumber() - a.account.endTs.toNumber());
-
         let html = "";
 
         for (const p of proposals) {
             const data: any = p.account;
-            const endTs = data.endTs.toNumber();
+            
+            // FIX: Use Optional Chaining (?.) and Nullish Coalescing (??) to prevent toNumber errors
+            const endTs = data.endTs?.toNumber() ?? 0;
+            const yesVotesRaw = data.yesVotes?.toNumber() ?? 0;
+            const noVotesRaw = data.noVotes?.toNumber() ?? 0;
+            const isExecuted = data.executed ?? false;
+            
             const isExpired = endTs < now;
-            const isExecuted = data.executed;
-
-            // --- TAB FILTERING ---
-            if (activeTab === 'active' && isExpired) continue;
-            if (activeTab === 'history' && !isExpired) continue;
-
-            // --- VOTE RECORD CHECK (The "Already Voted" Guard) ---
-            let hasVoted = false;
-            let stakedAmount = 0;
-            if (user) {
-                try {
-                    const [vRec] = PublicKey.findProgramAddressSync(
-                        [Buffer.from("vote_record"), p.publicKey.toBuffer(), user.toBuffer()],
-                        programId
-                    );
-                    const voteAcc: any = await program.account.voteRecord.fetchNullable(vRec);
-                    if (voteAcc) {
-                        hasVoted = true;
-                        stakedAmount = voteAcc.amount.toNumber() / 1e9;
-                    }
-                } catch (e) { hasVoted = false; }
-            }
-
-            // --- DATA CALCULATIONS ---
-            const yesVotes = data.yesVotes.toNumber() / 1e9;
-            const noVotes = data.noVotes.toNumber() / 1e9;
+            const yesVotes = yesVotesRaw / 1e9;
+            const noVotes = noVotesRaw / 1e9;
             const totalVotes = yesVotes + noVotes;
             const yesPercentage = totalVotes > 0 ? (yesVotes / totalVotes) * 100 : 0;
-            const isCreator = user && data.creator.equals(user);
-            const isRejected = isExpired && (noVotes >= yesVotes);
-            const timeLeft = getTimeLeft(endTs);
 
-            // --- DYNAMIC BUTTON LOGIC (The Gatekeeper) ---
-            let actionHtml = "";
-
-            if (!user) {
-                // STATE: DISCONNECTED
-                actionHtml = `<div class="w-full py-4 bg-white/5 border border-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase tracking-widest">Connect Wallet to Participate</div>`;
-            } else if (!isExpired) {
-                // STATE: ACTIVE PROPOSAL
-                if (hasVoted) {
-                    actionHtml = `<div class="w-full py-4 bg-green-500/10 border border-green-500/20 text-green-500 rounded-xl text-center text-[10px] font-black uppercase tracking-widest italic">✓ Participation Confirmed</div>`;
-                } else {
-                    actionHtml = `
-                        <div class="flex gap-3">
-                            <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="flex-1 py-4 bg-green-500 text-black font-black rounded-xl text-xs uppercase hover:bg-green-400 transition-all">Support</button>
-                            <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="flex-1 py-4 border border-white/10 text-white font-bold rounded-xl text-xs uppercase hover:bg-white/5 transition-all">Against</button>
-                        </div>`;
-                }
-            } else {
-                // STATE: EXPIRED / HISTORY
-                if (hasVoted) {
-                    // Reclaim Logic (0.05% fee)
-                    const fee = stakedAmount * 0.0005;
-                    const refund = stakedAmount - fee;
-                    actionHtml = `<button onclick="window.reclaimTokens('${p.publicKey.toBase58()}')" class="w-full py-4 bg-orange-500/10 border border-orange-500/50 text-orange-500 font-black rounded-xl text-xs uppercase hover:bg-orange-500 hover:text-white transition-all">Reclaim ${refund.toFixed(2)} OLV (Fee: ${fee.toFixed(4)})</button>`;
-                } else if (isExecuted) {
-                    actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase">Success: Funds Disbursed</div>`;
-                } else if (isRejected) {
-                    actionHtml = `<div class="w-full py-4 bg-red-500/5 text-red-500/50 border border-red-500/10 rounded-xl text-center text-[10px] font-black uppercase">Closed: Rejected</div>`;
-                } else if (isCreator) {
-                    actionHtml = `<button onclick="window.executeProposal('${p.publicKey.toBase58()}')" class="w-full py-4 bg-white text-black font-black rounded-xl text-xs uppercase shadow-xl hover:scale-[1.02] transition-transform">Execute Settlement</button>`;
-                } else {
-                    actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-600 rounded-xl text-center text-[10px] font-black uppercase tracking-widest">Awaiting Finalization</div>`;
+            // CHECK IF USER ALREADY VOTED
+            let hasVoted = false;
+            let userVoteWeight = 0;
+            if (user) {
+                const [vRec] = PublicKey.findProgramAddressSync(
+                    [Buffer.from("vote_record"), p.publicKey.toBuffer(), user.toBuffer()],
+                    programId
+                );
+                const voteAcc: any = await program.account.voteRecord.fetchNullable(vRec);
+                if (voteAcc) {
+                    hasVoted = true;
+                    userVoteWeight = (voteAcc.amount?.toNumber() ?? 0) / 1e9;
                 }
             }
 
-            // --- HTML TEMPLATE ---
+            // ACTION BUTTON LOGIC
+            let actionHtml = "";
+            
+            // Case 1: Wallet Not Connected
+            if (!user) {
+                actionHtml = `<button disabled class="w-full py-4 bg-white/5 text-gray-600 rounded-xl text-[10px] font-black uppercase cursor-not-allowed">Connect Wallet to Participate</button>`;
+            } 
+            // Case 2: User Already Voted
+            else if (hasVoted) {
+                actionHtml = `<div class="w-full py-4 bg-green-500/10 border border-green-500/20 text-green-500 rounded-xl text-center text-[10px] font-black uppercase italic">✓ Voted (${userVoteWeight.toFixed(2)} OLV)</div>`;
+            }
+            // Case 3: Proposal Active
+            else if (!isExpired) {
+                actionHtml = `
+                    <div class="flex gap-3">
+                        <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="flex-1 py-4 bg-green-500 text-black font-black rounded-xl text-xs uppercase hover:scale-[1.02] transition-transform">Support</button>
+                        <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="flex-1 py-4 border border-white/10 text-white font-bold rounded-xl text-xs uppercase hover:bg-white/5 transition-all">Against</button>
+                    </div>`;
+            }
+            // Case 4: Proposal Expired (Finalized)
+            else {
+                actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase italic">${isExecuted ? 'Proposal Executed' : 'Voting Closed'}</div>`;
+            }
+
             html += `
-                <div class="prop-card mb-6 animate-in">
+                <div class="prop-card mb-4 p-6 glass rounded-[2rem] border border-white/5">
                     <div class="flex justify-between items-start mb-4">
-                        <div class="space-y-1">
-                            <span class="prop-id">ID: ${p.publicKey.toBase58().slice(0, 8)}</span>
-                            <h4 class="prop-title text-2xl text-white uppercase leading-tight">${data.description}</h4>
+                        <div>
+                            <span class="text-[9px] font-mono text-gray-500 uppercase tracking-widest">ID: ${p.publicKey.toBase58().slice(0, 8)}</span>
+                            <h4 class="text-xl font-black uppercase text-white">${data.description}</h4>
                         </div>
-                        <div class="text-right flex flex-col items-end gap-2">
-                            <span class="badge ${isExpired ? 'badge-history' : 'badge-active'}">
-                                ${isExpired ? 'Finalized' : timeLeft}
-                            </span>
-                            <span class="text-green-400 font-mono text-xs font-black">${yesPercentage.toFixed(1)}% APPROVAL</span>
-                        </div>
+                        <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase ${isExpired ? 'bg-white/5 text-gray-500' : 'bg-green-500/10 text-green-500'}">
+                            ${isExpired ? 'Finalized' : 'Active'}
+                        </span>
                     </div>
-
-                    <div class="vote-track"><div class="vote-fill" style="width: ${yesPercentage}%"></div></div>
-                    
-                    <div class="flex justify-between mt-2 mb-8">
-                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Support: ${yesVotes.toLocaleString()}</span>
-                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Against: ${noVotes.toLocaleString()}</span>
+                    <div class="h-1 w-full bg-white/5 rounded-full overflow-hidden mb-2">
+                        <div class="h-full bg-green-500 transition-all duration-1000" style="width: ${yesPercentage}%"></div>
                     </div>
-
+                    <div class="flex justify-between text-[9px] font-bold text-gray-500 uppercase mb-6">
+                        <span>Support: ${yesVotes.toFixed(1)}</span>
+                        <span>Against: ${noVotes.toFixed(1)}</span>
+                    </div>
                     ${actionHtml}
                 </div>`;
-
-            // RPC Breath (Prevent 429)
-            await new Promise(r => setTimeout(r, 60));
         }
 
-        container.innerHTML = html || `
-            <div class="text-center py-20 border-2 border-dashed border-white/5 rounded-[3rem]">
-                <p class="text-gray-600 font-bold uppercase text-[10px] tracking-widest">Empty Workspace</p>
-            </div>`;
-
+        container.innerHTML = html || `<p class="text-center py-20 text-gray-600 uppercase text-[10px] font-black">No Proposals Found</p>`;
     } catch (e) {
-        console.error("Critical Render Error:", e);
-        container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-xs uppercase">Node Busy - Refresh Required</div>`;
+        console.error("Render Error:", e);
+        container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-[10px] uppercase">RPC Sync Error - Refresh Page</div>`;
     }
 };
-
 ////----RECLAIM -------
 (window as any).reclaimTokens = async (propId: string) => {
     try {
@@ -320,72 +279,82 @@ let currentTab = 'active';
 };
 
 // --- WALLET CONNECT ---
+// --- WALLET CONNECT & DISCONNECT ---
 (window as any).connectWallet = async () => {
     const { solana } = window as any;
     if (!solana) return alert("Please install Phantom Wallet");
 
+    // If already connected, clicking the button disconnects
+    if (solana.isConnected) {
+        await solana.disconnect();
+        return;
+    }
+
     try {
-        // 1. Connect Phantom Wallet
         const response = await solana.connect();
         const publicKey = response.publicKey.toString();
 
-        console.log("Wallet Connected:", publicKey);
         showToast("Wallet Connected");
+        updateActionState(true);
 
-        // 2. UI Updates (unlock dashboard)
-        document.body.classList.remove('wallet-disconnected');
-        document.querySelectorAll('.wallet-only').forEach(el => el.classList.remove('hidden'));
-
-        // Change the Connect button label to user address
         const connectBtn = document.getElementById('connect-btn');
         if (connectBtn) {
             connectBtn.innerText = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
-            connectBtn.classList.add(
-                'bg-green-500/10',
-                'text-green-500',
-                'border-green-500/20'
-            );
+            connectBtn.classList.add('bg-green-500/10', 'text-green-500', 'border', 'border-green-500/20');
         }
 
-        // Allow gated actions (Stake / Create Proposal / Vote)
-        updateActionState(true);
-
-        // 3. Critical Backend Sync
-        await syncUI();                       // balances, staked, treasury value
-        await updatePortfolioStats(publicKey); // <--- FIX incorrect variable
-        await (window as any).renderProposals(); // refresh proposal list & vote state UI
-
+        await syncUI();
+        await (window as any).renderProposals(); 
     } catch (err) {
         console.error("Connection Error:", err);
-        showToast("Wallet Connection Failed");
-        document.body.classList.add('wallet-disconnected');
+        showToast("Connection Failed");
+        updateActionState(false);
     }
 };
 
+// Listen for the actual event from Phantom
+(window as any).solana.on('disconnect', () => {
+    showToast("Session Ended");
+    
+    // Clear all balances in the UI
+    ['display-sol', 'display-olv', 'user-staked', 'total-staked'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.innerText = "0.00";
+    });
+
+    updateActionState(false);
+    (window as any).renderProposals(); // Re-render in "Read Only" mode
+});
 /**
- * Helper to toggle button accessibility based on wallet state
+ * Global UI Gatekeeper
+ * Disables all interaction except the Nav when wallet is disconnected.
  */
 const updateActionState = (isConnected: boolean) => {
-    // List all IDs of buttons that require a wallet
-    const actionIds = ['btn-stake', 'btn-unstake', 'btn-new-proposal', 'btn-buy-olv'];
+    // 1. Toggle the body class to trigger your CSS grayscale/pointer-events filter
+    if (isConnected) {
+        document.body.classList.remove('wallet-disconnected');
+    } else {
+        document.body.classList.add('wallet-disconnected');
+    }
+
+    // 2. Explicitly disable buttons that require a wallet
+    const actionButtons = document.querySelectorAll('.requires-wallet') as NodeListOf<HTMLButtonElement>;
     
-    actionIds.forEach(id => {
-        const el = document.getElementById(id) as HTMLButtonElement;
-        if (el) {
-            el.disabled = !isConnected;
-            el.style.opacity = isConnected ? "1" : "0.2";
-            el.style.cursor = isConnected ? "pointer" : "not-allowed";
-            
-            // If disconnected, add a tooltip or change text
-            if (!isConnected && el.innerText.indexOf("Connect") === -1) {
-                el.dataset.originalText = el.innerText;
-                el.innerText = "Connect Wallet";
-            } else if (isConnected && el.dataset.originalText) {
-                el.innerText = el.dataset.originalText;
-            }
+    actionButtons.forEach(btn => {
+        btn.disabled = !isConnected;
+        
+        if (!isConnected) {
+            // Save original text if not already saved
+            if (!btn.dataset.originalText) btn.dataset.originalText = btn.innerText;
+            btn.innerText = "Connect Wallet";
+        } else if (btn.dataset.originalText) {
+            // Restore original text
+            btn.innerText = btn.dataset.originalText;
         }
     });
 };
+
+
 (window as any).showView = (viewId: string) => {
     const sections = document.querySelectorAll('.view-section');
     sections.forEach(s => {
