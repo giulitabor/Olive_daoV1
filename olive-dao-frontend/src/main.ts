@@ -1,813 +1,597 @@
 import './polyfill'; 
-import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL } from "@solana/web3.js";
-import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL, SystemProgram, Keypair } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
 import * as anchor from "@coral-xyz/anchor";
 import idl from "./idl.json";
 
-
-// --- CONFIG & GLOBALS ---
+// --- GLOBALS ---
 const OLV_MINT = new PublicKey("6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA");
 const programId = new PublicKey("8MdiqqhZj1badeLArqCmZWeiWGK8tXQWiydRLcqzDn45");
 const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
-const ADMIN_WALLET = "8xkNHk2VpWBM6Nk3enitFCs7vwh2inCveTNintcXHc54";
-const SystemProgram = anchor.web3.SystemProgram;
 
+// --- PDA DERIVATIONS ---
 const [daoPDA] = PublicKey.findProgramAddressSync([Buffer.from("dao")], programId);
 const [vaultPDA] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
 
+// Helper to derive user-specific PDAs
+const getStakePDAs = (userPubkey: PublicKey) => {
+    const [stakeAccount] = PublicKey.findProgramAddressSync([Buffer.from("stake"), userPubkey.toBuffer()], programId);
+    const [stakeVault] = PublicKey.findProgramAddressSync([Buffer.from("stake_vault"), userPubkey.toBuffer()], programId);
+    return { stakeAccount, stakeVault };
+};
+
+// --- CORE PROGRAM HELPER ---
 const getProgram = () => {
-  const provider = new anchor.AnchorProvider(connection, (window as any).solana, { preflightCommitment: "confirmed" });
-  return new anchor.Program(idl as any, provider);
+    const wallet = (window as any).solana;
+    if (!wallet) throw new Error("Wallet not connected");
+    const provider = new anchor.AnchorProvider(connection, wallet, { preflightCommitment: "confirmed" });
+    return new anchor.Program(idl as any, provider);
 };
 
-// --- ENHANCED VIEW MANAGEMENT ---
-(window as any).showView = (viewId: string) => {
-    const views = ['view-home', 'view-voting', 'view-whitepaper', 'view-game'];
-    
-    views.forEach(v => {
-        const el = document.getElementById(v);
-        if (el) {
-            el.classList.add('hidden');
-            el.style.display = 'none'; // Extra insurance for layout
-        }
-    });
+const toggleWalletGuards = (isConnected: boolean) => {
+    const createBtn = document.querySelector('[onclick="window.createProposal()"]') as HTMLButtonElement;
+    const publishBtn = document.querySelector('[onclick="document.getElementById(\'modal-create\').classList.toggle(\'hidden\')"]') as HTMLButtonElement;
 
-    const activeView = document.getElementById(`view-` + viewId);
-    if (activeView) {
-        activeView.classList.remove('hidden');
-        activeView.style.display = 'block';
-    }
-
-    // Active Tab Styling
-    document.querySelectorAll('.nav-link').forEach(link => {
-        link.classList.remove('text-green-400', 'border-b-2', 'border-green-400');
-        if (link.getAttribute('onclick')?.includes(viewId)) {
-            link.classList.add('text-green-400', 'border-b-2', 'border-green-400');
-        }
-    });
-
-    if (viewId === 'voting') renderProposals();
-};
-
-// --- CLEAN DISCONNECT & CONNECT ---
-(window as any).connectWallet = async () => {
-    try {
-        const { solana } = window as any;
-        if (!solana) return alert("Please install Phantom wallet!");
-
-        // Trigger wallet connection
-        const response = await solana.connect();
-        console.log("Connected with Public Key:", response.publicKey.toString());
-        
-        // Refresh UI
-        document.getElementById('display-address')!.innerText = 
-            response.publicKey.toString().slice(0, 4) + "..." + response.publicKey.toString().slice(-4);
-        
-        // Update all metrics and lists now that we have a user
-        updateDAOMetrics();
-        renderProposals();
-        updateOrchardUI();
-
-    } catch (err) {
-        console.error("Connection failed", err);
-    }
-};
-const refreshWalletUI = async () => {
-    const provider = (window as any).solana;
-    const btn = document.querySelector('#connect') as HTMLButtonElement;
-    
-    if (provider?.isConnected) {
-        const addr = provider.publicKey.toBase58();
-        btn.innerHTML = `
-            <span class="flex items-center gap-2">
-                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
-                ${addr.slice(0, 4)}...${addr.slice(-4)}
-            </span>`;
-        btn.className = "px-4 py-2 rounded-xl bg-green-500/10 border border-green-500/50 text-green-400 font-bold text-sm transition-all hover:bg-green-500/20";
-        
-        updateUIBalances();
-        updateDAOMetrics();
+    if (isConnected) {
+        publishBtn?.classList.remove('opacity-50', 'cursor-not-allowed');
+        publishBtn.disabled = false;
+        publishBtn.innerText = "+ New Proposal";
     } else {
-        btn.innerText = "Connect Wallet";
-        btn.className = "px-4 py-2 rounded-xl bg-white text-black font-bold text-sm hover:bg-gray-200 transition-all";
-        
-        // Wipe UI on disconnect
-        document.getElementById('display-sol')!.innerText = "0.00";
-        document.getElementById('display-olv')!.innerText = "0";
-        (window as any).showView('home');
+        publishBtn?.classList.add('opacity-50', 'cursor-not-allowed');
+        publishBtn.disabled = true;
+        publishBtn.innerText = "Connect to Propose";
     }
 };
-async function updateDAOMetrics() {
-    console.log("--- DEBUG: Updating Metrics ---");
+const showToast = (message: string) => {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'toast border-l-4 border-green-500';
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+};
+
+const getTimeLeft = (endTs: number) => {
+    const now = Math.floor(Date.now() / 1000);
+    const diff = endTs - now;
+
+    if (diff <= 0) return "Voting Ended";
+
+    const days = Math.floor(diff / 86400);
+    const hours = Math.floor((diff % 86400) / 3600);
+    const minutes = Math.floor((diff % 3600) / 60);
+
+    if (days > 0) return `${days}d ${hours}h left`;
+    if (hours > 0) return `${hours}h ${minutes}m left`;
+    return `${minutes}m left`;
+};
+// --- UI REFRESH ---
+const syncUI = async () => {
+    const user = (window as any).solana?.publicKey;
+    if (!user) return;
+
+    try {
+        const program = getProgram();
+        const updateText = (id: string, val: string | number) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val.toString();
+        };
+        
+        // 1. SOL Balance
+        const solBal = await connection.getBalance(user);
+        updateText('display-sol', (solBal / LAMPORTS_PER_SOL).toFixed(3));
+
+        // 2. OLV Balance in Wallet
+        try {
+            const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+            const tokenBal = await connection.getTokenAccountBalance(userATA);
+            updateText('display-olv', tokenBal.value.uiAmountString || "0");
+        } catch (e) {
+            updateText('display-olv', "0");
+        }
+
+        // 3. DAO Global Data
+        try {
+            const daoData: any = await program.account.dao.fetch(daoPDA);
+            updateText('total-staked', (daoData.totalStaked.toNumber() / 1e9).toLocaleString());
+            
+            const vBal = await connection.getBalance(vaultPDA);
+            updateText('vault-balance', (vBal / LAMPORTS_PER_SOL).toFixed(4));
+        } catch (e) {
+            console.log("DAO not initialized yet");
+        }
+        
+        // 4. User Staked Balance
+        const { stakeAccount } = getStakePDAs(user);
+        try {
+            const stakeData: any = await program.account.stakeAccount.fetch(stakeAccount);
+            updateText('user-staked', (stakeData.amount.toNumber() / 1e9).toFixed(2));
+        } catch {
+            updateText('user-staked', "0");
+        }
+    } catch (e) {
+        console.warn("Sync UI Warning:", e);
+    }
+};
+
+// --- GOVERNANCE LOGIC ---
+let currentTab = 'active';
+
+(window as any).setVotingTab = (tab: string) => {
+// 1. UPDATE GLOBAL STATE
+    (window as any).currentTab = tab; 
+
+    // 2. UI Updates (Visual Line)
+    const activeBtn = document.getElementById('tab-active');
+    const historyBtn = document.getElementById('tab-history');
+
+    if (tab === 'active') {
+        activeBtn?.classList.replace('text-gray-500', 'text-white');
+        activeBtn?.classList.replace('border-transparent', 'border-green-500');
+        historyBtn?.classList.replace('text-white', 'text-gray-500');
+        historyBtn?.classList.replace('border-green-500', 'border-transparent');
+    } else {
+        historyBtn?.classList.replace('text-gray-500', 'text-white');
+        historyBtn?.classList.replace('border-transparent', 'border-green-500');
+        activeBtn?.classList.replace('text-white', 'text-gray-500');
+        activeBtn?.classList.replace('border-green-500', 'border-transparent');
+    }
+
+    // 3. Trigger Render
+    (window as any).renderProposals();
+};
+(window as any).renderProposals = async () => {
+    const container = document.getElementById('proposal-list');
+    const user = (window as any).solana?.publicKey; 
+    if (!container) return;
+
+    // 1. Show Professional Loading State
+    container.innerHTML = `
+        <div class="flex flex-col items-center py-20 gap-4">
+            <div class="spinner"></div>
+            <p class="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] animate-pulse">Syncing Ledger...</p>
+        </div>
+    `;
+
+    try {
+        const program = getProgram();
+        const now = Math.floor(Date.now() / 1000);
+        const activeTab = (window as any).currentTab || 'active';
+        
+        // Single RPC call to get all proposals
+        const proposals = await program.account.proposal.all();
+        
+        // Sort: Newest First
+        proposals.sort((a: any, b: any) => b.account.endTs.toNumber() - a.account.endTs.toNumber());
+
+        let html = "";
+
+        for (const p of proposals) {
+            const data: any = p.account;
+            const endTs = data.endTs.toNumber();
+            const isExpired = endTs < now;
+            const isExecuted = data.executed;
+
+            // --- TAB FILTERING ---
+            if (activeTab === 'active' && isExpired) continue;
+            if (activeTab === 'history' && !isExpired) continue;
+
+            // --- VOTE RECORD CHECK (The "Already Voted" Guard) ---
+            let hasVoted = false;
+            let stakedAmount = 0;
+            if (user) {
+                try {
+                    const [vRec] = PublicKey.findProgramAddressSync(
+                        [Buffer.from("vote_record"), p.publicKey.toBuffer(), user.toBuffer()],
+                        programId
+                    );
+                    const voteAcc: any = await program.account.voteRecord.fetchNullable(vRec);
+                    if (voteAcc) {
+                        hasVoted = true;
+                        stakedAmount = voteAcc.amount.toNumber() / 1e9;
+                    }
+                } catch (e) { hasVoted = false; }
+            }
+
+            // --- DATA CALCULATIONS ---
+            const yesVotes = data.yesVotes.toNumber() / 1e9;
+            const noVotes = data.noVotes.toNumber() / 1e9;
+            const totalVotes = yesVotes + noVotes;
+            const yesPercentage = totalVotes > 0 ? (yesVotes / totalVotes) * 100 : 0;
+            const isCreator = user && data.creator.equals(user);
+            const isRejected = isExpired && (noVotes >= yesVotes);
+            const timeLeft = getTimeLeft(endTs);
+
+            // --- DYNAMIC BUTTON LOGIC (The Gatekeeper) ---
+            let actionHtml = "";
+
+            if (!user) {
+                // STATE: DISCONNECTED
+                actionHtml = `<div class="w-full py-4 bg-white/5 border border-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase tracking-widest">Connect Wallet to Participate</div>`;
+            } else if (!isExpired) {
+                // STATE: ACTIVE PROPOSAL
+                if (hasVoted) {
+                    actionHtml = `<div class="w-full py-4 bg-green-500/10 border border-green-500/20 text-green-500 rounded-xl text-center text-[10px] font-black uppercase tracking-widest italic">✓ Participation Confirmed</div>`;
+                } else {
+                    actionHtml = `
+                        <div class="flex gap-3">
+                            <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="flex-1 py-4 bg-green-500 text-black font-black rounded-xl text-xs uppercase hover:bg-green-400 transition-all">Support</button>
+                            <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="flex-1 py-4 border border-white/10 text-white font-bold rounded-xl text-xs uppercase hover:bg-white/5 transition-all">Against</button>
+                        </div>`;
+                }
+            } else {
+                // STATE: EXPIRED / HISTORY
+                if (hasVoted) {
+                    // Reclaim Logic (0.05% fee)
+                    const fee = stakedAmount * 0.0005;
+                    const refund = stakedAmount - fee;
+                    actionHtml = `<button onclick="window.reclaimTokens('${p.publicKey.toBase58()}')" class="w-full py-4 bg-orange-500/10 border border-orange-500/50 text-orange-500 font-black rounded-xl text-xs uppercase hover:bg-orange-500 hover:text-white transition-all">Reclaim ${refund.toFixed(2)} OLV (Fee: ${fee.toFixed(4)})</button>`;
+                } else if (isExecuted) {
+                    actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase">Success: Funds Disbursed</div>`;
+                } else if (isRejected) {
+                    actionHtml = `<div class="w-full py-4 bg-red-500/5 text-red-500/50 border border-red-500/10 rounded-xl text-center text-[10px] font-black uppercase">Closed: Rejected</div>`;
+                } else if (isCreator) {
+                    actionHtml = `<button onclick="window.executeProposal('${p.publicKey.toBase58()}')" class="w-full py-4 bg-white text-black font-black rounded-xl text-xs uppercase shadow-xl hover:scale-[1.02] transition-transform">Execute Settlement</button>`;
+                } else {
+                    actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-600 rounded-xl text-center text-[10px] font-black uppercase tracking-widest">Awaiting Finalization</div>`;
+                }
+            }
+
+            // --- HTML TEMPLATE ---
+            html += `
+                <div class="prop-card mb-6 animate-in">
+                    <div class="flex justify-between items-start mb-4">
+                        <div class="space-y-1">
+                            <span class="prop-id">ID: ${p.publicKey.toBase58().slice(0, 8)}</span>
+                            <h4 class="prop-title text-2xl text-white uppercase leading-tight">${data.description}</h4>
+                        </div>
+                        <div class="text-right flex flex-col items-end gap-2">
+                            <span class="badge ${isExpired ? 'badge-history' : 'badge-active'}">
+                                ${isExpired ? 'Finalized' : timeLeft}
+                            </span>
+                            <span class="text-green-400 font-mono text-xs font-black">${yesPercentage.toFixed(1)}% APPROVAL</span>
+                        </div>
+                    </div>
+
+                    <div class="vote-track"><div class="vote-fill" style="width: ${yesPercentage}%"></div></div>
+                    
+                    <div class="flex justify-between mt-2 mb-8">
+                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Support: ${yesVotes.toLocaleString()}</span>
+                        <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">Against: ${noVotes.toLocaleString()}</span>
+                    </div>
+
+                    ${actionHtml}
+                </div>`;
+
+            // RPC Breath (Prevent 429)
+            await new Promise(r => setTimeout(r, 60));
+        }
+
+        container.innerHTML = html || `
+            <div class="text-center py-20 border-2 border-dashed border-white/5 rounded-[3rem]">
+                <p class="text-gray-600 font-bold uppercase text-[10px] tracking-widest">Empty Workspace</p>
+            </div>`;
+
+    } catch (e) {
+        console.error("Critical Render Error:", e);
+        container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-xs uppercase">Node Busy - Refresh Required</div>`;
+    }
+};
+
+////----RECLAIM -------
+(window as any).reclaimTokens = async (propId: string) => {
     try {
         const program = getProgram();
         const user = (window as any).solana.publicKey;
-
-        // 1. Vault Balance
-        const vaultBalance = await connection.getBalance(vaultPDA);
+        const propKey = new PublicKey(propId);
         
-        // 2. DAO Account Data
-        const daoData = await program.account.dao.fetch(daoPDA);
-        const totalStaked = daoData.totalStaked.toNumber() / 1e9;
-
-        // 3. Fetch Personal Stake
-        if (user) {
-            const [stakeAccountPDA] = PublicKey.findProgramAddressSync(
-                [Buffer.from("stake"), user.toBuffer()],
-                programId
-            );
-            try {
-                const stakeData = await program.account.stakeAccount.fetch(stakeAccountPDA);
-                const userStake = (stakeData.amount.toNumber() / 1e9).toLocaleString();
-                const userEl = document.getElementById("user-staked-display");
-                if (userEl) userEl.innerText = userStake;
-            } catch (e) {
-                if (document.getElementById("user-staked-display")) {
-                    document.getElementById("user-staked-display")!.innerText = "0";
-                }
-            }
-        }
-
-        document.getElementById('vault-balance')!.innerText = (vaultBalance / 1e9).toFixed(4);
-        document.getElementById('total-staked')!.innerText = totalStaked.toLocaleString();
-
-    } catch (err) {
-        console.error("DEBUG ERROR in updateDAOMetrics:", err);
-    }
-}
-// Fixed Donation Function
-(window as any).donateToDao = async () => {
-    const amountInput = document.getElementById('donate-amount') as HTMLInputElement;
-    const solAmount = parseFloat(amountInput.value);
-    const provider = (window as any).solana;
-
-    // 1. Security Check: Input validation
-    if (!amountInput || isNaN(solAmount) || solAmount <= 0) {
-        return alert("Please enter a valid SOL amount to donate.");
-    }
-
-    // 2. Security Check: Wallet connection
-    if (!provider || !provider.publicKey) {
-        return alert("Please connect your wallet first!");
-    }
-
-    try {
-        const userPublicKey = provider.publicKey;
-
-        // 3. Create Transaction
-        const transaction = new anchor.web3.Transaction().add(
-            anchor.web3.SystemProgram.transfer({
-                fromPubkey: userPublicKey,
-                toPubkey: vaultPDA,
-                lamports: solAmount * anchor.web3.LAMPORTS_PER_SOL,
-            })
+        const [vRec] = PublicKey.findProgramAddressSync(
+            [Buffer.from("vote_record"), propKey.toBuffer(), user.toBuffer()],
+            programId
         );
 
-        // 4. Critical Fix: Fetch recent blockhash & set feePayer
-        const { blockhash } = await connection.getLatestBlockhash('confirmed');
-        transaction.recentBlockhash = blockhash;
-        transaction.feePayer = userPublicKey;
+        showToast("Processing Reclaim...");
 
-        // 5. Sign and Send
-        const { signature } = await provider.signAndSendTransaction(transaction);
-        
-        // 6. Confirm
-        await connection.confirmTransaction(signature, "confirmed");
-        
-        alert(`Success! ${solAmount} SOL donated to the Olive Vault.`);
-        
-        // Clear input and refresh UI
-        amountInput.value = "";
-        if (typeof updateDAOMetrics === 'function') {
-            updateDAOMetrics(); 
-	    updateUIBalances();
-        }
+        // Ensure user has an ATA (Associated Token Account) for the OLV mint
+        const userAta = getAssociatedTokenAddressSync(OLV_MINT, user);
 
-    } catch (err: any) {
-        console.error("Donation failed:", err);
-        alert("Transaction failed: " + (err.message || "User rejected or network error"));
-    }
-};
-// --- UPDATE DASHBOARD ---
-async function updateUIBalances() {
-  const program = getProgram();
-  const wallet = program.provider.publicKey;
-  if (!wallet) return;
-// --- 2. ADMIN PANEL VISIBILITY CHECK ---
-  const adminPanel = document.getElementById("admin-panel");
-  if (adminPanel) {
-    adminPanel.style.display = wallet.toBase58() === ADMIN_WALLET ? "block" : "none";
-  }
-  document.getElementById("display-address")!.innerText = wallet.toBase58().slice(0, 6) + "...";
-  
-  const solBal = await connection.getBalance(wallet);
-  document.getElementById("display-sol")!.innerText = (solBal / 1e9).toFixed(3);
+        await program.methods.reclaim().accounts({
+            dao: daoPDA,
+            proposal: propKey,
+            voteRecord: vRec,
+            user: user,
+            userToken: userAta,
+            vault: vaultPDA, // Fee (0.05%) goes to the treasury vault
+            tokenProgram: TOKEN_PROGRAM_ID,
+        }).rpc();
 
-  try {
-    const ata = getAssociatedTokenAddressSync(OLV_MINT, wallet);
-    const tokenBal = await connection.getTokenAccountBalance(ata);
-    document.getElementById("display-olv")!.innerText = tokenBal.value.uiAmountString;
-  } catch {
-    document.getElementById("display-olv")!.innerText = "0.00";
-  }
-}
-// --- 3. ADMIN ACTIONS ---
-document.getElementById("admin-init-btn")?.addEventListener("click", async () => {
-  try {
-    const program = getProgram();
-    const [statePDA] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
-    
-    await program.methods.initialize().accounts({
-      state: statePDA,
-      authority: program.provider.publicKey,
-      systemProgram: anchor.web3.SystemProgram.programId,
-    }).rpc();
-    
-    alert("DAO Initialized on Devnet!");
-  } catch (err: any) {
-    alert("Init Error: " + err.message);
-  }
-});
-
-document.getElementById("admin-vault-btn")?.addEventListener("click", async () => {
-  try {
-    const program = getProgram();
-    const [vaultPDA] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-    
-    const transaction = new anchor.web3.Transaction().add(
-      anchor.web3.SystemProgram.transfer({
-        fromPubkey: program.provider.publicKey,
-        toPubkey: vaultPDA,
-        lamports: 0.1 * 1e9,
-      })
-    );
-    
-    await program.provider.sendAndConfirm(transaction);
-    alert("Vault Funded with 0.1 SOL!");
-  } catch (err: any) {
-    alert("Funding Error: " + err.message);
-  }
-});
-
-// --- JOIN DAO ---
-(window as any).joinDao = async () => {
-  try {
-    const program = getProgram();
-    const user = program.provider.publicKey!;
-    const [statePDA] = PublicKey.findProgramAddressSync([Buffer.from("state")], programId);
-    const [vaultPDA] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-    
-    const amount = new anchor.BN(100 * 1e9); // Get 100 tokens
-    const userTokenAccount = getAssociatedTokenAddressSync(OLV_MINT, user);
-
-    await program.methods.joinDao(amount).accounts({
-      state: statePDA,
-      olvMint: OLV_MINT,
-      userTokenAccount,
-      vault: vaultPDA,
-      user,
-      tokenProgram: TOKEN_PROGRAM_ID,
-      associatedTokenProgram: ASSOCIATED_TOKEN_PROGRAM_ID,
-      systemProgram: anchor.web3.SystemProgram.programId,
-    }).rpc();
-
-    alert("Joined!");
-    updateUIBalances();
-  } catch (err: any) {
-    alert("Error: " + err.message);
-  }
-};
-
-// --- PROPOSAL RENDER (FIXED) ---
-let currentGovTab = 'active';
-
-(window as any).setGovTab = (tab: string) => {
-    currentGovTab = tab;
-    // Update Tab UI
-    document.getElementById('tab-active')?.classList.toggle('border-green-500', tab === 'active');
-    document.getElementById('tab-active')?.classList.toggle('text-white', tab === 'active');
-    document.getElementById('tab-history')?.classList.toggle('border-green-500', tab === 'history');
-    document.getElementById('tab-history')?.classList.toggle('text-white', tab === 'history');
-    
-    renderProposals();
-};
-
-async function renderProposals() {
-const program = getProgram();
-    const container = document.getElementById('proposal-list');
-    if (!container) return;
-
-// Fetching all vote records for the user at once is more efficient than one-by-one
-const allVotes = await program.account.voteRecord.all([
-    { memcmp: { offset: 32, bytes: user.toBase58() } } // Filter by voter address
-]);
-
-// Inside the .map(p => { ... }) loop:
-const hasVotedOnThis = allVotes.some(v => v.account.proposal.toBase58() === p.publicKey.toBase58());
-
-let actionHtml = '';
-if (hasVotedOnThis) {
-    actionHtml = `<div class="text-center py-2 bg-blue-500/10 rounded-lg text-[9px] font-bold text-blue-400 uppercase border border-blue-500/20">Already Voted</div>`;
-} 
-else if (!isExpired) {
-actionHtml = `
-        <div class="flex gap-2 w-full">
-            <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="...">YES</button>
-            <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="...">NO</button>
-        </div>`;}
-    try {
-        const program = getProgram();
-        const proposals = await program.account.proposal.all();
-        const user = (window as any).solana?.publicKey;
-        const hideRejected = (document.getElementById('hide-rejected') as HTMLInputElement)?.checked;
-        const now = Math.floor(Date.now() / 1000);
-
-        // Filter based on Tab selection
-        const filtered = proposals.filter(p => {
-            const isExpired = now > (p.account.endTs?.toNumber() ?? 0);
-            if (currentGovTab === 'active') return !isExpired;
-            return isExpired; // History tab
-        });
-
-        if (filtered.length === 0) {
-            container.innerHTML = `<div class="p-20 text-center glass rounded-3xl border border-white/5 text-gray-600 uppercase text-[10px] font-bold tracking-widest">No ${currentGovTab} proposals found</div>`;
-            return;
-        }
-
-        container.innerHTML = filtered.map(p => {
-            const rawPayout = p.account.payoutAmount ? p.account.payoutAmount.toNumber() : 0;
-            const yesVotes = p.account.yesVotes?.toNumber() ?? 0;
-            const noVotes = p.account.noVotes?.toNumber() ?? 0;
-            const endTs = p.account.endTs?.toNumber() ?? 0;
-            const isExpired = now > endTs;
-            const didPass = yesVotes > noVotes;
-            const isCreator = user && p.account.creator.toBase58() === user.toBase58();
-
-            if (hideRejected && isExpired && !didPass) return '';
-
-            // Dynamic Action Button
-            let actionHtml = '';
-            if (!isExpired) {
-                actionHtml = `
-                    <div class="flex gap-2 w-full">
-                        <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="flex-1 py-3 bg-green-500 text-black font-black text-[10px] rounded-xl hover:scale-[1.02] transition">YES</button>
-                        <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="flex-1 py-3 bg-red-500 text-black font-black text-[10px] rounded-xl hover:scale-[1.02] transition">NO</button>
-                    </div>`;
-            } else if (didPass && !p.account.executed && isCreator) {
-                actionHtml = `<button onclick="window.executeProposal('${p.publicKey.toBase58()}')" class="w-full py-3 bg-white text-black font-black text-[10px] rounded-xl hover:bg-green-400 transition">CLAIM ${((rawPayout/1e9)*0.9).toFixed(2)} SOL</button>`;
-            } else {
-                actionHtml = `<div class="w-full py-3 bg-white/5 border border-white/10 text-center rounded-xl text-[9px] font-bold text-gray-500 uppercase">${p.account.executed ? '✓ Funds Distributed' : 'Archived'}</div>`;
-            }
-
-            return `
-                <div class="glass p-6 rounded-3xl border border-white/5 bg-gradient-to-br from-white/[0.02] to-transparent">
-                    <div class="flex flex-col md:flex-row justify-between gap-6">
-                        <div class="flex-1">
-                            <div class="flex items-center gap-3 mb-2">
-                                <span class="w-2 h-2 rounded-full ${isExpired ? (didPass ? 'bg-blue-500' : 'bg-red-500') : 'bg-green-500 animate-pulse'}"></span>
-                                <span class="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">${isExpired ? (didPass ? 'Passed' : 'Rejected') : 'Voting Open'}</span>
-                            </div>
-                            <h4 class="text-xl font-black italic uppercase text-white mb-1">${p.account.description}</h4>
-                            <p class="text-[10px] text-gray-500 font-mono italic">Creator: ${p.account.creator.toBase58().slice(0,6)}...${p.account.creator.toBase58().slice(-4)}</p>
-                        </div>
-                        
-                        <div class="w-full md:w-64 space-y-4">
-                            <div class="flex justify-between items-end">
-                                <span class="text-[9px] text-gray-500 font-bold uppercase">Proposal Payout</span>
-                                <span class="text-xl font-black italic text-green-400">${(rawPayout/1e9).toFixed(2)} SOL</span>
-                            </div>
-                            <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden flex">
-                                <div class="bg-green-500 h-full" style="width: ${(yesVotes/(yesVotes+noVotes+1e-9))*100}%"></div>
-                                <div class="bg-red-500 h-full" style="width: ${(noVotes/(yesVotes+noVotes+1e-9))*100}%"></div>
-                            </div>
-                            ${actionHtml}
-                        </div>
-                    </div>
-                </div>`;
-        }).join('');
+        showToast("OLV Reclaimed (0.05% Fee)");
+        await (window as any).renderProposals();
+        await syncUI();
     } catch (e) {
-        console.error("Render failed", e);
+        console.error("Reclaim Error:", e);
+        showToast("Reclaim Failed");
     }
-}
+};
 
-// --- GLOBAL HANDLERS ---
+// --- WALLET CONNECT ---
+(window as any).connectWallet = async () => {
+    const { solana } = window as any;
+    if (!solana) return alert("Please install Phantom Wallet");
 
-// Local state for user's trees
-let userOrchard: Array<{id: number, fraction: number, type: string}> = [];
-(window as any).buyTree = async (currency: 'sol' | 'olv') => {
-    const slider = document.getElementById('tree-slider') as HTMLInputElement;
-    const fraction = parseInt(slider.value);
-    const user = (window as any).solana.publicKey;
+    try {
+        // 1. Connect Phantom Wallet
+        const response = await solana.connect();
+        const publicKey = response.publicKey.toString();
 
-    if (!user) return alert("Please connect wallet.");
+        console.log("Wallet Connected:", publicKey);
+        showToast("Wallet Connected");
+
+        // 2. UI Updates (unlock dashboard)
+        document.body.classList.remove('wallet-disconnected');
+        document.querySelectorAll('.wallet-only').forEach(el => el.classList.remove('hidden'));
+
+        // Change the Connect button label to user address
+        const connectBtn = document.getElementById('connect-btn');
+        if (connectBtn) {
+            connectBtn.innerText = `${publicKey.slice(0, 4)}...${publicKey.slice(-4)}`;
+            connectBtn.classList.add(
+                'bg-green-500/10',
+                'text-green-500',
+                'border-green-500/20'
+            );
+        }
+
+        // Allow gated actions (Stake / Create Proposal / Vote)
+        updateActionState(true);
+
+        // 3. Critical Backend Sync
+        await syncUI();                       // balances, staked, treasury value
+        await updatePortfolioStats(publicKey); // <--- FIX incorrect variable
+        await (window as any).renderProposals(); // refresh proposal list & vote state UI
+
+    } catch (err) {
+        console.error("Connection Error:", err);
+        showToast("Wallet Connection Failed");
+        document.body.classList.add('wallet-disconnected');
+    }
+};
+
+/**
+ * Helper to toggle button accessibility based on wallet state
+ */
+const updateActionState = (isConnected: boolean) => {
+    // List all IDs of buttons that require a wallet
+    const actionIds = ['btn-stake', 'btn-unstake', 'btn-new-proposal', 'btn-buy-olv'];
+    
+    actionIds.forEach(id => {
+        const el = document.getElementById(id) as HTMLButtonElement;
+        if (el) {
+            el.disabled = !isConnected;
+            el.style.opacity = isConnected ? "1" : "0.2";
+            el.style.cursor = isConnected ? "pointer" : "not-allowed";
+            
+            // If disconnected, add a tooltip or change text
+            if (!isConnected && el.innerText.indexOf("Connect") === -1) {
+                el.dataset.originalText = el.innerText;
+                el.innerText = "Connect Wallet";
+            } else if (isConnected && el.dataset.originalText) {
+                el.innerText = el.dataset.originalText;
+            }
+        }
+    });
+};
+(window as any).showView = (viewId: string) => {
+    const sections = document.querySelectorAll('.view-section');
+    sections.forEach(s => {
+        s.classList.add('hidden', 'opacity-0');
+        s.style.transform = "translateY(10px)";
+    });
+
+    const active = document.getElementById(`view-${viewId}`);
+    if (active) {
+        active.classList.remove('hidden');
+        // Small timeout to trigger CSS transition
+        setTimeout(() => {
+            active.classList.remove('opacity-0');
+            active.style.transform = "translateY(0)";
+            active.classList.add('transition-all', 'duration-500');
+        }, 10);
+    }
+    
+    if (viewId === 'voting') (window as any).renderProposals();
+};
+
+// --- STAKING ACTIONS ---
+(window as any).stakeOLV = async () => {
+    const amountVal = (document.getElementById('stake-amount') as HTMLInputElement).value;
+    if (!amountVal) return;
+    const amount = new anchor.BN(parseFloat(amountVal) * 1e9);
 
     try {
         const program = getProgram();
-        // Assume Tree #104 is the current marketplace featured tree
-        const featuredTreeId = 104; 
-
-        // 1. Execute Blockchain Transaction
-        await program.methods.buyTree(new anchor.BN(fraction), currency === 'sol')
-            .accounts({
-                dao: daoPDA,
-                vault: vaultPDA,
-                user: user,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            }).rpc();
-
-        // 2. Logic to update the local Orchard List
-        const existingTree = userOrchard.find(t => t.id === featuredTreeId);
-        if (existingTree) {
-            existingTree.fraction += fraction; // Add to existing ownership
-        } else {
-            userOrchard.push({ 
-                id: featuredTreeId, 
-                fraction: fraction, 
-                type: 'Koroneiki', 
-                health: 'Excellent' 
-            });
-        }
-
-        // 3. Refresh the UI
-        updateOrchardUI();
-        alert(`Success! You now own ${fraction}% more of Tree #${featuredTreeId}.`);
+        const user = (window as any).solana.publicKey;
+        const { stakeAccount, stakeVault } = getStakePDAs(user);
         
-    } catch (e: any) {
-        console.error("Marketplace Error:", e);
-        alert("Transaction failed. Check wallet for details.");
-    }
+        await program.methods.stake(amount).accounts({
+            dao: daoPDA,
+            vault: vaultPDA,
+            stakeAccount,
+            stakeVault,
+            stakeMint: OLV_MINT,
+            userToken: getAssociatedTokenAddressSync(OLV_MINT, user),
+            user: user,
+            tokenProgram: TOKEN_PROGRAM_ID,
+            systemProgram: SystemProgram.programId,
+        }).rpc();
+        
+        alert("Staked successfully!");
+        await syncUI();
+    } catch (e) { console.error("Stake error:", e); }
 };
-// Local state for the user's purchased fractions
-function updateOrchardUI() {
-    const container = document.getElementById('user-trees');
-    if (!container) return;
 
-    if (userOrchard.length === 0) {
-        container.innerHTML = `
-            <div class="col-span-full p-8 border-2 border-dashed border-white/5 rounded-3xl text-center">
-                <p class="text-[10px] uppercase tracking-widest text-gray-600 font-bold">Your Orchard is empty</p>
-                <p class="text-[9px] text-gray-700 mt-1 italic">Purchase tree fractions in the marketplace to see them here.</p>
-            </div>`;
+(window as any).unstakeOLV = async () => {
+    const amountVal = (document.getElementById('stake-amount') as HTMLInputElement).value;
+    if (!amountVal) return;
+    const amount = new anchor.BN(parseFloat(amountVal) * 1e9);
+
+    try {
+        const program = getProgram();
+        const user = (window as any).solana.publicKey;
+        const { stakeAccount, stakeVault } = getStakePDAs(user);
+        
+        await program.methods.unstake(amount).accounts({
+            dao: daoPDA,
+            stakeAccount,
+            stakeVault,
+            userToken: getAssociatedTokenAddressSync(OLV_MINT, user),
+            user: user,
+            tokenProgram: TOKEN_PROGRAM_ID,
+        }).rpc();
+        
+        alert("Unstaked successfully!");
+        await syncUI();
+    } catch (e) { console.error("Unstake error:", e); }
+};
+
+// --- PROPOSAL ACTIONS ---
+(window as any).createProposal = async () => {
+    const desc = (document.getElementById('prop-desc') as HTMLInputElement).value;
+    const amount = (document.getElementById('prop-payout') as HTMLInputElement).value;
+    const days = (document.getElementById('prop-days') as HTMLInputElement).value;
+
+    if (!desc || !amount) {
+        showToast("Error: Missing Details");
         return;
     }
 
-    container.innerHTML = userOrchard.map(tree => `
-        <div class="glass p-5 rounded-2xl border border-green-500/20 bg-green-500/[0.02] flex flex-col gap-3">
-            <div class="flex justify-between items-start">
-                <div>
-                    <span class="text-[8px] font-black bg-green-500 text-black px-1.5 py-0.5 rounded">TREE #${tree.id}</span>
-                    <h5 class="text-sm font-black italic uppercase mt-1 text-white">${tree.type}</h5>
-                </div>
-                <span class="text-[8px] uppercase font-bold text-green-400 border border-green-400/30 px-2 py-0.5 rounded-full">${tree.health}</span>
-            </div>
-            
-            <div class="space-y-1">
-                <div class="flex justify-between text-[9px] uppercase font-bold">
-                    <span class="text-gray-500">Ownership</span>
-                    <span class="text-white">${tree.fraction}%</span>
-                </div>
-                <div class="w-full h-1.5 bg-white/5 rounded-full overflow-hidden">
-                    <div class="bg-green-500 h-full rounded-full" style="width: ${tree.fraction}%"></div>
-                </div>
-            </div>
-            
-            <button class="w-full py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-[8px] uppercase font-black text-gray-400 transition">
-                View On-Chain Metadata
-            </button>
-        </div>
-    `).join('');
-}
-
-(window as any).stakeOLV = async () => {
-    const inputEl = document.getElementById('stake-amount') as HTMLInputElement;
-    const amount = parseFloat(inputEl.value);
-
-    // --- GATEKEEPER ---
-    if (!inputEl.value || isNaN(amount) || amount <= 0) {
-        inputEl.classList.add('border-red-500', 'animate-pulse');
-        setTimeout(() => inputEl.classList.remove('border-red-500', 'animate-pulse'), 2000);
-        return alert("Please enter a valid OLV amount to stake.");
-    }
-	
-	try {
+    try {
+        showToast("Signing Transaction...");
         const program = getProgram();
         const user = (window as any).solana.publicKey;
+        const proposalKeypair = Keypair.generate();
         
-        // Ensure ID matches your HTML input
-        const inputEl = document.getElementById('stake-amount') as HTMLInputElement;
-        const amount = parseFloat(inputEl.value);
+        const duration = new anchor.BN(parseInt(days || "3") * 86400);
+        const payout = new anchor.BN(parseFloat(amount) * 1e9);
 
-        if (isNaN(amount) || amount <= 0) return alert("Enter a valid amount");
-
-        // Derive all needed PDAs
-        const [dao] = PublicKey.findProgramAddressSync([Buffer.from("dao")], programId);
-        const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-        const [stakeAccount] = PublicKey.findProgramAddressSync([Buffer.from("stake"), user.toBuffer()], programId);
-        const [stakeVault] = PublicKey.findProgramAddressSync([Buffer.from("stake_vault"), user.toBuffer()], programId);
-        
-        const userToken = getAssociatedTokenAddressSync(OLV_MINT, user);
-
-        await program.methods
-            .stake(new anchor.BN(amount * 1e9))
+        await program.methods.createProposal(desc, duration, payout)
             .accounts({
-                dao,
-                vault,
-                stakeAccount,
-                stakeVault,
-                stakeMint: OLV_MINT,
-                userToken,
-                user,
-                tokenProgram: TOKEN_PROGRAM_ID,
-                systemProgram: anchor.web3.SystemProgram.programId,
+                dao: daoPDA,
+                proposal: proposalKeypair.publicKey,
+                creator: user,
+                systemProgram: SystemProgram.programId,
             })
+            .signers([proposalKeypair])
             .rpc();
 
-        alert("Stake Successful! (0.01 SOL fee sent to treasury)");
-        updateDAOMetrics();
-        updateUIBalances();
-    } catch (err) {
-        console.error("Stake failed:", err);
+        // 1. Hide Modal
+        document.getElementById('modal-create')?.classList.add('hidden');
+        
+        // 2. Clear Inputs
+        (document.getElementById('prop-desc') as HTMLInputElement).value = "";
+        
+        // 3. Switch Tab and Refresh
+        showToast("Proposal Published!");
+        (window as any).setVotingTab('active'); 
+
+    } catch (e: any) { 
+        console.error("Creation Error", e);
+        showToast("Transaction Cancelled");
     }
 };
-
-
-(window as any).unstakeOLV = async () => {
-    console.log("--- DEBUG: Starting Unstake Transaction ---");
+/////////////-------VOTE
+(window as any).vote = async (id: string, side: boolean) => {
     try {
         const program = getProgram();
         const user = (window as any).solana.publicKey;
-        
-        const inputEl = document.getElementById('unstake-amount') as HTMLInputElement;
-        const amount = parseFloat(inputEl.value);
-
-        if (isNaN(amount) || amount <= 0) return alert("Enter amount to unstake");
-
-        const [dao] = PublicKey.findProgramAddressSync([Buffer.from("dao")], programId);
-        const [stakeAccount] = PublicKey.findProgramAddressSync([Buffer.from("stake"), user.toBuffer()], programId);
-        const [stakeVault] = PublicKey.findProgramAddressSync([Buffer.from("stake_vault"), user.toBuffer()], programId);
-        const userToken = getAssociatedTokenAddressSync(OLV_MINT, user);
-
-        await program.methods
-            .unstake(new anchor.BN(amount * 1e9))
-            .accounts({
-                dao,
-                stakeAccount,
-                stakeVault,
-                userToken,
-                user,
-                tokenProgram: TOKEN_PROGRAM_ID,
-            })
-            .rpc();
-
-        alert("Unstaked Successfully!");
-        updateDAOMetrics();
-        updateUIBalances();
-    } catch (err) {
-        console.error("Unstake failed:", err);
-        alert("Unstake failed. Check console.");
-    }
-};
-(window as any).vote = async (proposalId: string, side: boolean) => {
-    const program = getProgram();
-    const propKey = new PublicKey(proposalId);
-    const voter = (window as any).solana.publicKey;
-    
-    try {
-        // --- UX GUARDRAIL: Check expiration before calling wallet ---
-        const p = await program.account.proposal.fetch(propKey);
-        const isExpired = Math.floor(Date.now() / 1000) > p.endTs.toNumber();
-        
-        if (isExpired) {
-            alert("This proposal has ended. Voting is closed.");
-            return;
-        }
-
-        const [stakeAccount] = PublicKey.findProgramAddressSync([Buffer.from("stake"), voter.toBuffer()], programId);
-        const [voteRecord] = PublicKey.findProgramAddressSync([Buffer.from("vote_record"), propKey.toBuffer(), voter.toBuffer()], programId);
+        const propKey = new PublicKey(id);
+        const { stakeAccount } = getStakePDAs(user);
+        const [voteRecord] = PublicKey.findProgramAddressSync([Buffer.from("vote_record"), propKey.toBuffer(), user.toBuffer()], programId);
 
         await program.methods.vote(side).accounts({
             proposal: propKey,
             stakeAccount,
             voteRecord,
-            voter,
+            voter: user,
             systemProgram: SystemProgram.programId,
         }).rpc();
         
-        renderProposals();
-    } catch (e: any) {
-        if (e.message.includes("already voted")) alert("You have already voted on this proposal.");
-        else alert("Vote failed. Ensure you have tokens staked.");
-    }
+        (window as any).renderProposals();
+    } catch (e) { console.error("Vote Error", e); }
 };
 
-(window as any).executeProposal = async (proposalId: string) => {
-    const program = getProgram();
-    const propKey = new PublicKey(proposalId);
-    const user = (window as any).solana.publicKey;
-
+(window as any).executeProposal = async (propId: string) => {
     try {
-        const p = await program.account.proposal.fetch(propKey);
+        const program = getProgram();
+        const user = (window as any).solana.publicKey;
+        const propKey = new PublicKey(propId);
+
+        console.group("🚀 PROPOSAL EXECUTION DEBUG");
+        const propData: any = await program.account.proposal.fetch(propKey);
         
-        // --- SECURITY: Only creator check ---
-        if (p.creator.toBase58() !== user.toBase58()) {
-            return alert("Only the proposal creator can execute and withdraw funds.");
+        // FIX: Safe access to the payout field
+        const rawAmount = propData.payoutAmount || propData.amount || propData.payout || { toNumber: () => 0 };
+        const payoutValue = rawAmount.toNumber();
+
+        console.log("Proposal Creator:", propData.creator.toBase58());
+        console.log("Payout:", (payoutValue / 1e9), " SOL");
+        
+        const vaultBalance = await connection.getBalance(vaultPDA);
+        console.log("Vault Balance:", (vaultBalance / 1e9), " SOL");
+        console.groupEnd();
+
+        if (vaultBalance < payoutValue) {
+            showToast("Vault Insufficient Funds");
+            return;
         }
 
-        const [dao] = PublicKey.findProgramAddressSync([Buffer.from("dao")], programId);
-        const [vault] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
-
+        showToast("Executing Settlement...");
         await program.methods.execute().accounts({
-            dao,
+            dao: daoPDA,
             proposal: propKey,
             authority: user,
-            vault,
-            recipient: user,
+            vault: vaultPDA, 
+            recipient: propData.creator,
             systemProgram: SystemProgram.programId,
         }).rpc();
+        
+        showToast("Success: Funds Released");
+        await (window as any).renderProposals();
+        await syncUI();
 
-        alert("Executed! Funds sent to your wallet (90%) and Treasury (10%).");
-        renderProposals();
-    } catch (e) {
-        console.error("Execution failed", e);
-        alert("Execution failed. Is the proposal passed and ended?");
+    } catch (e: any) {
+        console.error("Execute Error:", e);
+        showToast("Execution Failed");
     }
 };
-// --- APP INITIALIZATION ---
-// --- APP INITIALIZATION ---
-
-// Inside your main init()
-const hideToggle = document.getElementById('hide-rejected');
-if (hideToggle) {
-    hideToggle.addEventListener('change', () => {
-        console.log("Filtering proposals...");
-        renderProposals(); // Re-run the render with the new filter state
-    });
-}
-
-// --- ADMIN: CHECK TOTAL SUPPLY ---
-async function getMintSupply() {
-  try {
-    const supply = await connection.getTokenSupply(OLV_MINT);
-    const display = document.getElementById("total-minted");
-    if (display) display.innerText = supply.value.uiAmountString + " OLV";
-  } catch (e) { console.error("Could not fetch supply"); }
-}
-
-const syncWalletState = async () => {
-  const provider = (window as any).solana;
-  const isConnected = provider?.isConnected;
-
-  // Button label
-  const btn = document.querySelector('#connect');
-  if (btn) btn.textContent = isConnected ? "Disconnect" : "Connect Wallet";
-
-  if (!isConnected) {
-    (window as any).showView('home');
-
-    const addr = document.getElementById("display-address");
-    if (addr) addr.innerText = "--";
-
-    const admin = document.getElementById("admin-panel");
-    if (admin) admin.style.display = "none";
-
-    return;
-  }
-
-  // Connected flow
-  await updateUIBalances();
-  await getMintSupply();     // admin check
-  await updateDAOMetrics();  // TVL / stats
-};
-
-let walletListenersAttached = false;
-
-const init = async () => {
-  const provider = (window as any).solana;
-  if (!provider || walletListenersAttached) return;
-
-  provider.on("connect", syncWalletState);
-  provider.on("disconnect", syncWalletState);
-
-  walletListenersAttached = true;
-  await syncWalletState();
-};
-
+//---DISCONNECT----
+(window as any).solana.on('disconnect', () => {
+    console.log("Wallet Disconnected");
+    showToast("Wallet Disconnected");
     
-// Auto-disable buttons if inputs are empty
-const watchInputs = (inputId: string, btnId: string) => {
-    const input = document.getElementById(inputId) as HTMLInputElement;
-    const btn = document.getElementById(btnId) as HTMLButtonElement;
-    
-    if (input && btn) {
-        input.addEventListener('input', () => {
-            btn.disabled = !input.value || parseFloat(input.value) <= 0;
-            btn.style.opacity = btn.disabled ? "0.5" : "1";
-            btn.style.cursor = btn.disabled ? "not-allowed" : "pointer";
-        });
+    // Reset Connect Button
+    const connectBtn = document.getElementById('connect-btn');
+    if (connectBtn) {
+        connectBtn.innerText = "Connect Wallet";
+        connectBtn.classList.remove('bg-green-500/10', 'text-green-500');
     }
-};
-    watchInputs('stake-amount', 'stake-btn');
-    watchInputs('amount-input', 'create-btn');
 
-    // --- CREATE PROPOSAL HANDLER ---
-    document.querySelector('#create-btn')?.addEventListener('click', async (e) => {
-        const btn = e.currentTarget as HTMLButtonElement;
-        if (btn.disabled) return;
+    // Lock UI and Re-render as "Read Only"
+    updateActionState(false);
+    (window as any).renderProposals(); // This will now show "Connect Wallet to Participate"
+});
 
-        const titleInput = document.querySelector('#title-input') as HTMLInputElement;
-        const amountInput = document.querySelector('#amount-input') as HTMLInputElement;
-        const description = titleInput.value.trim();
-        const payoutAmount = parseFloat(amountInput.value);
-        const PROPOSAL_FEE_LAMPORTS = 0.0132 * anchor.web3.LAMPORTS_PER_SOL;
 
-        try {
-            btn.disabled = true;
-            btn.innerText = "SIGNING...";
-            const program = getProgram();
-            const user = (window as any).solana.publicKey;
-            const proposalKeypair = anchor.web3.Keypair.generate();
-
-            // 1. Fee Instruction
-            const feeIx = anchor.web3.SystemProgram.transfer({
-                fromPubkey: user,
-                toPubkey: vaultPDA,
-                lamports: PROPOSAL_FEE_LAMPORTS,
-            });
-
-            // 2. Create Instruction
-            const createIx = await program.methods.createProposal(
-                description, 
-                new anchor.BN(3600), 
-                new anchor.BN(payoutAmount * 1e9)
-            )
-            .accounts({
-                dao: daoPDA,
-                proposal: proposalKeypair.publicKey,
-                creator: user,
-                systemProgram: anchor.web3.SystemProgram.programId,
-            })
-            .instruction();
-
-            const tx = new anchor.web3.Transaction().add(feeIx).add(createIx);
-            tx.feePayer = user;
-            tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
-            
-            // IMPORTANT: Sign with the new proposal account keypair
-            tx.partialSign(proposalKeypair);
-
-            const signature = await (window as any).solana.signAndSendTransaction(tx);
-            await connection.confirmTransaction(signature, "confirmed");
-// --- ADD THESE LOGS TO YOUR CREATE BUTTON LISTENER ---
-const amountInput = document.querySelector('#amount-input') as HTMLInputElement;
-const amount = parseFloat(amountInput.value);
-
-console.log("--- DEBUG PROPOSAL CREATION ---");
-console.log("Raw Input Value:", amountInput.value);
-console.log("Parsed Float:", amount);
-
-// Convert to Lamports (This is where the 0.00 error usually lives)
-const lamports = new anchor.BN(amount * 1_000_000_000); 
-console.log("BN Lamports being sent:", lamports.toString());
-
-// Check description length
-console.log("Description:", description);
-            alert("Proposal Created!");
-            titleInput.value = ""; amountInput.value = "";
-        } catch (err: any) {
-            console.error(err);
-            alert(err.message || "Failed");
-        } finally {
-            btn.disabled = false;
-            btn.innerText = "CREATE PROPOSAL";
-            renderProposals();
-            updateDAOMetrics();
+// --- INITIALIZE ---
+window.addEventListener('load', () => {
+    setTimeout(() => {
+        if ((window as any).solana?.isConnected) {
+            syncUI();
         }
-    });
-
-    // --- LIVE LISTENER ---
-    connection.onProgramAccountChange(programId, () => {
-        renderProposals();
-        updateDAOMetrics();
-    }, 'confirmed', [{ dataSize: 1000 }]);
-
-    // --- ADMIN INIT ---
-
-
-// Inside your initialization code
-document.getElementById('hide-rejected')?.addEventListener('change', renderProposals);
-    document.getElementById("admin-init-btn")?.addEventListener("click", async () => {
-        try {
-            const program = getProgram();
-            await program.methods.initDao().accounts({
-                dao: daoPDA,
-                stakeMint: OLV_MINT,
-                authority: (window as any).solana.publicKey,
-                vault: vaultPDA,
-                systemProgram: SystemProgram.programId,
-            }).rpc();
-            alert("DAO live!");
-        } catch (err) { console.error(err); }
- });
-
-if (document.readyState === 'complete' || document.readyState === 'interactive') { init(); } 
-else { window.addEventListener('load', init); }
+    }, 800);
+});
