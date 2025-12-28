@@ -20,6 +20,40 @@ const getStakePDAs = (userPubkey: PublicKey) => {
     return { stakeAccount, stakeVault };
 };
 
+// --- GLOBAL GAME STATE ------ 1. GLOBAL HELPERS (Add these at the top level) ---
+const getOracleData = () => {
+    const oracleRaw = localStorage.getItem('olive_oracle_data');
+    // Default to 25 degrees if no data exists
+    return oracleRaw ? JSON.parse(oracleRaw) : { temp: 25 };
+};
+// --- 1. GLOBAL STATE & HELPERS (Must be first) ---
+let myGrove: any[] = JSON.parse(localStorage.getItem('my_grove') || '[]');
+
+// This function must be defined BEFORE the setInterval loop
+const getCurrentWeather = () => {
+    const oracleRaw = localStorage.getItem('olive_oracle_data');
+    return oracleRaw ? JSON.parse(oracleRaw) : { temp: 25 };
+};
+
+
+// --- HOOK INTO NAVIGATION UI---
+const originalShowView = (window as any).showView;
+(window as any).showView = (viewId: string) => {
+    console.log("Switching to view:", viewId);
+    document.querySelectorAll('.view-section').forEach(section => {
+        section.classList.add('hidden');
+    });
+    const activeView = document.getElementById(`view-${viewId}`);
+    if (activeView) activeView.classList.remove('hidden');
+
+    // Trigger specific renders
+    if (viewId === 'game') (window as any).renderGrove();
+    if (viewId === 'market') (window as any).renderMarketplace();
+    if (viewId === 'voting') (window as any).renderProposals();
+};
+
+
+
 // --- CORE PROGRAM HELPER ---
 const getProgram = () => {
     const wallet = (window as any).solana;
@@ -145,6 +179,9 @@ let currentTab = 'active';
     // 3. Trigger Render
     (window as any).renderProposals();
 };
+
+
+
 (window as any).renderProposals = async () => {
     const container = document.getElementById('proposal-list');
     const user = (window as any).solana?.publicKey; 
@@ -240,6 +277,289 @@ let currentTab = 'active';
     } catch (e) {
         console.error("Render Error:", e);
         container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-[10px] uppercase">RPC Sync Error - Refresh Page</div>`;
+    }
+};
+
+
+
+
+// --- MARKETPLACE CONFIG ---
+const TOTAL_TREES = 250;
+const PRICE_SOL = 0.1;
+const PRICE_OLV = 100;
+
+(window as any).renderMarketplace = async () => {
+    console.log("[Market] Starting render sequence...");
+    const container = document.getElementById('market-listings');
+    if (!container) return;
+
+    // Clear and show loader
+    container.innerHTML = `<div class="col-span-full py-20 text-center text-xs font-mono text-gray-500 animate-pulse">FETCHING MARKET DATA...</div>`;
+
+    try {
+        let html = "";
+        // In a real app, you would fetch actual listing accounts from your IDL
+        for (let i = 1; i <= TOTAL_TREES; i++) {
+            const mockROI = (8 + Math.random() * 7).toFixed(1); // 8-15% ROI
+            
+            html += `
+                <div class="glass p-6 rounded-[2.5rem] border border-white/5 hover:border-green-500/30 transition-all duration-500 group">
+                    <div class="relative aspect-square mb-6 overflow-hidden rounded-[2rem] bg-gradient-to-b from-white/5 to-transparent flex items-center justify-center">
+                        <span class="text-5xl group-hover:scale-110 transition-transform duration-500">🌳</span>
+                        <div class="absolute top-4 right-4 bg-black/80 backdrop-blur-md px-3 py-1 rounded-full text-[9px] font-bold border border-white/10">
+                            UNIT #${i.toString().padStart(3, '0')}
+                        </div>
+                    </div>
+
+                    <div class="flex justify-between items-start mb-6">
+                        <div>
+                            <h4 class="font-black uppercase text-sm tracking-tight">Fractional Olive Tree</h4>
+                            <p class="text-[10px] text-gray-500 font-bold uppercase mt-1">Status: <span class="text-green-500">Productive</span></p>
+                        </div>
+                        <div class="text-right">
+                            <p class="text-[10px] text-gray-500 font-bold uppercase">ROI</p>
+                            <p class="text-sm font-black text-white">${mockROI}%</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-3">
+                        <button onclick="window.buyTree(${i}, 'SOL')" class="py-4 bg-white text-black rounded-2xl text-[10px] font-black uppercase hover:bg-green-400 transition-all">
+                            ${PRICE_SOL} SOL
+                        </button>
+                        <button onclick="window.buyTree(${i}, 'OLV')" class="py-4 bg-white/5 text-white border border-white/10 rounded-2xl text-[10px] font-black uppercase hover:bg-white/10 transition-all">
+                            ${PRICE_OLV} OLV
+                        </button>
+                    </div>
+                </div>
+            `;
+        }
+        
+        container.innerHTML = html;
+        console.log(`[Market] Successfully rendered ${TOTAL_TREES} listings.`);
+    } catch (e) {
+        console.error("[Market] Render error:", e);
+        showToast("Failed to load market");
+    }
+};
+
+(window as any).buyTree = async (id: number, currency: string) => {
+    console.log(`[Transaction] Initiating purchase for Tree #${id} using ${currency}`);
+    const wallet = (window as any).solana;
+    
+    if (!wallet.isConnected) {
+        console.warn("[Transaction] Blocked: Wallet not connected");
+        return showToast("Connect Wallet First");
+    }
+
+    try {
+        showToast(`Confirming ${currency} Purchase...`);
+        
+        // This is where you would call your Anchor method from the IDL
+        // Example: await program.methods.purchaseTree(new BN(id)).accounts({...}).rpc();
+        
+        console.log(`[Transaction] Success! Tree #${id} assigned to ${wallet.publicKey.toString()}`);
+        showToast(`Purchased Tree #${id}!`, "success");
+        
+        // Refresh balances after purchase
+        await (window as any).syncUI(); 
+    } catch (e) {
+        console.error("[Transaction] Error during purchase:", e);
+        showToast("Transaction Denied");
+    }
+};
+
+
+///// -----------FANTGAME---------
+// --- THE OLIVE GROWER ENGINE ---
+// --- 1. CONSOLIDATED GLOBAL STATS ENGINE ---
+
+const updateGlobalFieldStats = () => {
+    const statsBar = document.getElementById('field-stats-bar');
+    if (!myGrove || myGrove.length === 0) {
+        if (statsBar) statsBar.classList.add('hidden'); // Hide if no trees
+        return;
+    }
+    
+    if (statsBar) statsBar.classList.remove('hidden'); // Show if trees exist
+    // CO2: Bigger level = more sequestration
+    const totalCO2 = myGrove.reduce((acc, tree) => {
+        const baseRate = tree.level === 1 ? 0.1 : tree.level === 2 ? 0.5 : 1.2;
+        return acc + baseRate;
+    }, 0);
+
+    const avgHealth = myGrove.reduce((acc, t) => acc + t.health, 0) / myGrove.length;
+    
+    // Harvest Difficulty logic based on overgrown trees
+    const overgrownCount = myGrove.filter(t => t.isOvergrown).length;
+
+    // Update the UI Elements
+    const co2El = document.getElementById('co2-total');
+    const healthEl = document.getElementById('field-health');
+    const diffEl = document.getElementById('harvest-diff');
+
+
+    if (statsBar) statsBar.classList.remove('hidden');
+    if (co2El) co2El.innerText = `${totalCO2.toFixed(2)} kg/hr`;
+    
+    if (healthEl) {
+        healthEl.innerText = `${Math.round(avgHealth)}%`;
+        healthEl.className = `text-xl font-black ${avgHealth < 40 ? 'text-red-500' : 'text-white'}`;
+    }
+
+    if (diffEl) {
+        diffEl.innerText = overgrownCount > 0 ? `HARD (${overgrownCount} BLOCKED)` : 'NORMAL';
+        diffEl.className = `text-xl font-black ${overgrownCount > 0 ? 'text-red-500' : 'text-green-400'}`;
+    }
+};
+
+// --- 2. THE MASTER GAME LOOP ---
+setInterval(() => {
+    // A. Check Oracle for Heatwave
+    const oracleRaw = localStorage.getItem('olive_oracle_data');
+const oracle = getOracleData(); // Get fresh data every 5s
+    const isHeatwave = oracle.temp > 35;
+	const weather = getCurrentWeather();
+       const activeHeatwave = weather.temp > 35;  
+    
+    
+    // B. Control HUD Visibility & Visual Effects
+    const banner = document.getElementById('weather-banner');
+    if (banner) {
+        if (isHeatwave) {
+            banner.classList.remove('hidden');
+            document.body.style.boxShadow = "inset 0 0 100px rgba(255, 100, 0, 0.2)";
+        } else {
+            banner.classList.add('hidden');
+            document.body.style.boxShadow = "none";
+        }
+    }
+
+    // 3. Process Tree Decay
+    myGrove.forEach(tree => {
+        const decayRate = activeHeatwave ? 7 : 2;
+        tree.water = Math.max(0, tree.water - decayRate);
+        if (tree.water === 0) tree.health = Math.max(0, tree.health - 3);
+        
+        // Random chance to become overgrown
+        if (Math.random() > 0.99) tree.isOvergrown = true;
+    });
+
+    updateGlobalFieldStats(); // Updates the HUD
+    saveAndRender();         // Updates the Trees
+}, 5000);
+
+
+(window as any).renderGrove = () => {
+    const container = document.getElementById('grove-grid');
+    if (!container) return;
+
+    container.innerHTML = myGrove.map(tree => {
+        // Determine the tree stage emoji based on level
+        const stage = tree.level === 1 ? '🌱' : tree.level === 2 ? '🌿' : '🌳';
+        const difficultyColor = tree.isOvergrown ? 'text-red-500' : 'text-gray-500';
+// Inside your renderGrove .map function:
+const overgrownLabel = tree.isOvergrown 
+    ? `<p class="text-[10px] font-black text-red-500 animate-pulse">⚠️ OVERGROWN</p>` 
+    : `<p class="text-[10px] font-black text-gray-500 uppercase tracking-widest">✓ PRUNED</p>`;
+        
+        // Calculate health-based border colors for the card
+        const cardBorder = tree.health < 40 ? 'border-red-500/50' : 'border-white/5';
+        
+        return `
+        <div class="glass p-6 rounded-[2.5rem] border ${cardBorder} relative group transition-all" data-tree-id="${tree.id}">
+            <div class="absolute top-4 right-4 text-[8px] font-black text-white/20">LVL ${tree.level}</div>
+            
+            <div class="text-center py-8 cursor-pointer hover:scale-110 transition-transform" onclick="window.tendTree(${tree.id}, 'water', event)">
+                <span class="text-7xl block mb-2">${stage}</span>
+                
+                <div class="mt-4 w-20 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
+                    <div class="h-full bg-green-500 transition-all duration-500" 
+                         style="width: ${tree.xp % 100}%"></div>
+                </div>
+                <p class="text-[7px] text-center mt-1 uppercase text-gray-500">Progress to LVL ${tree.level + 1}</p>
+            </div>
+
+            <div class="space-y-4">
+                <div class="flex justify-between items-end">
+                    <p class="text-[10px] font-black uppercase ${difficultyColor}">
+                        ${tree.isOvergrown ? '⚠️ OVERGROWN' : '✓ Pruned'}
+                    </p>
+                    <p class="text-[10px] font-black text-blue-400">${tree.water}% H2O</p>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="window.tendTree(${tree.id}, 'water', event)" 
+                            class="py-3 bg-blue-500/10 text-blue-400 rounded-xl text-[9px] font-black uppercase hover:bg-blue-500 hover:text-white transition-all">
+                        Water
+                    </button>
+                    <button onclick="window.tendTree(${tree.id}, 'prune', event)" 
+                            class="py-3 bg-yellow-500/10 text-yellow-500 rounded-xl text-[9px] font-black uppercase hover:bg-yellow-500 hover:text-black transition-all">
+                        Prune
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    }).join('');
+    
+    // Call the correct global stats function
+    updateGlobalFieldStats();
+};
+
+const saveAndRender = () => {
+    localStorage.setItem('my_grove', JSON.stringify(myGrove));
+    (window as any).renderGrove();
+};
+
+
+(window as any).plantSeedling = () => {
+    myGrove.push({ id: Date.now(), health: 100, water: 100, xp: 0, level: 1, isOvergrown: false });
+    saveAndRender();
+};
+(window as any).tendTree = (id: number, action: string, event: MouseEvent) => {
+    const tree = myGrove.find(t => t.id === id);
+    if (!tree) return;
+
+    // FIX: Get fresh weather data here to prevent ReferenceError
+    const weather = getOracleData();
+    const isHeatwave = weather.temp > 35;
+
+    if (action === 'water') {
+        tree.water = Math.min(100, tree.water + (isHeatwave ? 12 : 25));
+        tree.health = Math.min(100, tree.health + 5);
+        showXP(event.clientX, event.clientY, "+H2O");
+    } else if (action === 'prune') {
+        tree.xp += 20;
+        if (tree.xp >= 100) { tree.level += 1; tree.xp = 0; showToast("Level Up!"); }
+        showXP(event.clientX, event.clientY, "+20 XP");
+    }
+// --- CRITICAL: Save and Update UI ---
+    localStorage.setItem('my_grove', JSON.stringify(myGrove)); // Persist the change
+    (window as any).renderGrove(); // Force the HTML to redraw without "OVERGROWN"
+    
+    saveAndRender();
+};
+
+
+
+// Visual Feedback Helper
+const showXP = (x: number, y: number, text: string) => {
+    const el = document.createElement('div');
+    el.className = 'fixed font-black text-green-400 pointer-events-none z-[100] animate-float-up text-xs';
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.innerText = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+};
+(window as any).connectWallet = async () => {
+    try {
+        const resp = await (window as any).solana.connect();
+        console.log("Connected:", resp.publicKey.toString());
+        await syncUI();
+        showToast("Wallet Connected");
+    } catch (err) {
+        console.error("Connection failed", err);
     }
 };
 ////----RECLAIM -------

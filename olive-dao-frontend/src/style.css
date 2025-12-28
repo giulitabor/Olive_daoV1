@@ -5,6 +5,26 @@ body {
     background-color: #000;
 }
 
+@keyframes float-up {
+    0% { transform: translateY(0); opacity: 1; }
+    100% { transform: translateY(-100px); opacity: 0; }
+}
+
+.animate-float-up {
+    animation: float-up 1s ease-out forwards;
+}
+
+/* Glassmorphism update */
+.glass {
+    background: rgba(255, 255, 255, 0.03);
+    backdrop-filter: blur(10px);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass:hover {
+    background: rgba(255, 255, 255, 0.06);
+    transform: translateY(-4px);
+}
 /* MASTER SECURITY: Block main interaction when wallet-disconnected */
 body.wallet-disconnected main {
     pointer-events: none !important;
@@ -47,6 +67,29 @@ body:has(#modal-create:not(.hidden)) .modal-backdrop {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+/* Add this to style.css */
+.heatwave-active #grove-grid {
+    filter: url(#wavy); /* Requires an SVG filter in HTML or simple blur */
+    animation: shimmer 2s infinite linear;
+}
+
+@keyframes shimmer {
+    0% { filter: contrast(1.1) brightness(1.1) saturate(1.2); }
+    50% { filter: contrast(1.2) brightness(1.3) saturate(1.5); }
+    100% { filter: contrast(1.1) brightness(1.1) saturate(1.2); }
+}
+
+#field-stats-bar {
+    background: linear-gradient(135deg, rgba(255,255,255,0.05) 0%, rgba(255,255,255,0.01) 100%);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+
+/* Subtle glow for the OLV balance */
+#display-olv {
+    text-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
 }
 
 .animate-fade-in-up {
