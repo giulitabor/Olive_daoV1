@@ -1,8 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
 
+
 body {
     font-family: 'Inter', sans-serif;
     background-color: #000;
+}
+
+/* High-priority selector for the red box */
+.glass.input-error,
+input.input-error {
+    border: 2px solid #ef4444 !important;
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.6) !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+    animation: shake-horizontal 0.4s cubic-bezier(.36,.07,.19,.97) both !important;
+}
+
+@keyframes shake-horizontal {
+    0%, 100% { transform: translateX(0); }
+    15% { transform: translateX(-10px); }
+    30% { transform: translateX(10px); }
+    45% { transform: translateX(-10px); }
+    60% { transform: translateX(10px); }
+}
+
+/* THE RED GLOW & SHAKE */
+@keyframes shake-horizontal {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-10px); }
+    40% { transform: translateX(10px); }
+    60% { transform: translateX(-10px); }
+    80% { transform: translateX(10px); }
+}
+
+.input-error {
+    animation: shake-horizontal 0.3s cubic-bezier(.36,.07,.19,.97) both;
+    border: 2px solid #ef4444 !important; /* The Red Box */
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.5) !important;
+    background: rgba(239, 68, 68, 0.1) !important;
 }
 
 @keyframes float-up {
@@ -46,6 +80,63 @@ body.wallet-disconnected nav {
     -webkit-backdrop-filter: blur(20px);
 }
 
+/* Dual Vote Bar Container */
+.vote-track-dual {
+    display: flex;
+    width: 100%;
+    height: 6px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Red line for "Against" votes */
+.bg-red-500 {
+    background-color: #ef4444;
+    box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+}
+
+/* Green line for "Support" votes */
+.bg-green-500 {
+    background-color: #22c55e;
+    box-shadow: 0 0 10px rgba(34, 197, 94, 0.2);
+}
+
+/* Fade in for newly rendered list items */
+.animate-fade-in-up {
+    animation: fade-in-up 0.4s ease-out forwards;
+}
+
+/* THE SHAKE ANIMATION */
+@keyframes shake-horizontal {
+    0%, 100% { transform: translateX(0); }
+    20% { transform: translateX(-8px); }
+    40% { transform: translateX(8px); }
+    60% { transform: translateX(-8px); }
+    80% { transform: translateX(8px); }
+}
+
+.animate-shake {
+    animation: shake-horizontal 0.3s cubic-bezier(.36,.07,.19,.97) both;
+    border-color: #ef4444 !important; /* Force red border during shake */
+    box-shadow: 0 0 15px rgba(239, 68, 68, 0.4);
+}
+
+@keyframes shake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+}
+
+.animate-shake {
+    animation: shake 0.2s ease-in-out 0s 2;
+}
+
+/* Optional: Subtle pulse on the button when it's ready */
+input:not(:placeholder-shown) + button {
+    filter: brightness(1.1);
+    box-shadow: 0 0 15px rgba(34, 197, 94, 0.3);
+}
 .modal-backdrop {
     display: none;
     position: fixed;

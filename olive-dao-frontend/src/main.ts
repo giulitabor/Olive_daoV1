@@ -104,10 +104,57 @@ const getTimeLeft = (endTs: number) => {
     if (hours > 0) return `${hours}h ${minutes}m left`;
     return `${minutes}m left`;
 };
+
 // --- UI REFRESH ---
 const syncUI = async () => {
     const user = (window as any).solana?.publicKey;
     if (!user) return;
+
+//////////////---NEW -----------
+
+try {
+        const program = getProgram();
+        
+        // 1. Fetch Basic Balances
+        const solBal = await connection.getBalance(user);
+        const formattedSol = (solBal / LAMPORTS_PER_SOL).toFixed(3);
+        
+        // 2. Fetch DAO & Vault Global Data
+        const daoData: any = await program.account.dao.fetch(daoPDA);
+        const vaultBal = await connection.getBalance(vaultPDA);
+
+        // 3. Fetch User Staking Account
+        const { stakeAccount } = getStakePDAs(user);
+        let userStaked = "0.00";
+        try {
+            const stakeData: any = await program.account.stakeAccount.fetch(stakeAccount);
+            userStaked = (stakeData.amount.toNumber() / 1e9).toFixed(2);
+        } catch (e) { /* Stake account might not exist yet */ }
+
+        // UPDATE GOVERNANCE HUD ELEMENTS
+        const update = (id: string, val: string) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        };
+
+        update('gov-user-sol', formattedSol);
+        update('gov-user-staked', userStaked);
+        update('gov-vault-sol', (vaultBal / LAMPORTS_PER_SOL).toFixed(3));
+        update('gov-total-staked', (daoData.totalStaked.toNumber() / 1e9).toLocaleString());
+
+        // Update the OLV Token Balance
+        try {
+            const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+            const tokenBal = await connection.getTokenAccountBalance(userATA);
+            update('gov-user-olv', tokenBal.value.uiAmountString || "0");
+        } catch (e) { update('gov-user-olv', "0.00"); }
+
+    } catch (e) {
+        console.warn("Governance HUD Sync Error:", e);
+    }
+
+
+
 
     try {
         const program = getProgram();
@@ -155,6 +202,121 @@ const syncUI = async () => {
 
 // --- GOVERNANCE LOGIC ---
 let currentTab = 'active';
+// --- GOVERNANCE INTERACTIVITY ---
+
+const markInvalid = (elId: string) => {
+    const el = document.getElementById(elId);
+    if (el) {
+        el.classList.add('input-error');
+        // Remove the error state after 1 second so the user can try again
+        setTimeout(() => {
+            el.classList.remove('input-error');
+        }, 1000);
+    }
+};
+
+// --- GLOBAL GOVERNANCE ACTIONS ---
+
+/**
+ * Handles the blockchain transaction for creating a new DAO proposal
+ */
+(window as any).submitProposal = async () => {
+    console.log("Submit Proposal Initiated");
+    try {
+        const titleInput = document.getElementById('prop-title') as HTMLInputElement;
+        const amountInput = document.getElementById('prop-amount') as HTMLInputElement;
+
+        // --- UX GATEKEEPER ---
+        if (!titleInput.value) {
+            showToast("⚠️ Title required");
+            return triggerGatekeeper(titleInput);
+        }
+        if (!amountInput.value || parseFloat(amountInput.value) <= 0) {
+            showToast("⚠️ Valid SOL amount required");
+            return triggerGatekeeper(amountInput);
+        }
+
+        // --- DEFINE VARIABLES TO MATCH IDL ---
+        const description = titleInput.value; // Your code used 'title' but defined 'titleInput'
+        const amountValue = parseFloat(amountInput.value); // Your code used 'amount'
+        
+        const program = getProgram();
+        const user = (window as any).solana.publicKey;
+        const proposalKeypair = Keypair.generate(); 
+
+        console.log("Using DAO PDA:", daoPDA.toBase58());
+        showToast("Requesting Signature...");
+
+        // Note: According to your IDL, create_proposal args are:
+        // 1. description (string)
+        // 2. duration (i64)
+        // 3. payout (u64)
+        await program.methods
+            .createProposal(
+                description, // Corrected variable
+                new anchor.BN(259200), 
+                new anchor.BN(amountValue * LAMPORTS_PER_SOL) // Corrected variable
+            )
+            .accounts({
+                dao: daoPDA,
+                proposal: proposalKeypair.publicKey,
+                creator: user,
+                systemProgram: SystemProgram.programId,
+            })
+            .signers([proposalKeypair])
+            .rpc();
+
+        showToast("✅ Proposal Published!");
+        (window as any).closeProposalModal();
+        await (window as any).renderProposals();
+
+    } catch (e: any) {
+        console.error("Blockchain Error:", e);
+        showToast("Transaction Failed");
+    }
+};
+/**
+ * Filter proposals by Active vs History
+ */
+(window as any).filterProposals = (tab: 'active' | 'history') => {
+    console.log("Filtering proposals by:", tab);
+    
+    // Update Button UI
+    const buttons = document.querySelectorAll('[onclick^="window.filterProposals"]');
+    buttons.forEach(btn => {
+        btn.classList.remove('text-green-400', 'border-b-2', 'border-green-500');
+        btn.classList.add('text-gray-500');
+    });
+
+    const activeBtn = event?.currentTarget as HTMLElement;
+    if (activeBtn) {
+        activeBtn.classList.add('text-green-400', 'border-b-2', 'border-green-500');
+        activeBtn.classList.remove('text-gray-500');
+    }
+
+    // Call the original render function (which now handles the filters)
+    (window as any).renderProposals(tab);
+};
+
+/**
+ * Opens the Create Proposal Modal
+ */
+(window as any).openProposalModal = () => {
+    const modal = document.getElementById('proposal-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+};
+
+(window as any).closeProposalModal = () => {
+    const modal = document.getElementById('proposal-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+};
+
 
 (window as any).setVotingTab = (tab: string) => {
 // 1. UPDATE GLOBAL STATE
@@ -187,100 +349,102 @@ let currentTab = 'active';
     const user = (window as any).solana?.publicKey; 
     if (!container) return;
 
-    // Loading State
     container.innerHTML = `<div class="text-center py-20 animate-pulse text-[10px] font-black uppercase text-gray-500">Syncing Ledger...</div>`;
+
+    (window as any).currentTab = 'active'; // global filter state
 
     try {
         const program = getProgram();
         const now = Math.floor(Date.now() / 1000);
-        const proposals = await program.account.proposal.all();
-        
+
+        const allProposals = await program.account.proposal.all();
+
+        const filteredProposals = allProposals.filter((p: any) => {
+            const isExpired = (p.account.endTs?.toNumber() ?? 0) < now;
+            return (window as any).currentTab === 'active' ? !isExpired : isExpired;
+        });
+
         let html = "";
 
-        for (const p of proposals) {
-            const data: any = p.account;
-            
-            // FIX: Use Optional Chaining (?.) and Nullish Coalescing (??) to prevent toNumber errors
+        for (const p of filteredProposals) {
+            const data = p.account;
+
             const endTs = data.endTs?.toNumber() ?? 0;
             const yesVotesRaw = data.yesVotes?.toNumber() ?? 0;
             const noVotesRaw = data.noVotes?.toNumber() ?? 0;
-            const isExecuted = data.executed ?? false;
-            
-            const isExpired = endTs < now;
+
             const yesVotes = yesVotesRaw / 1e9;
             const noVotes = noVotesRaw / 1e9;
             const totalVotes = yesVotes + noVotes;
-            const yesPercentage = totalVotes > 0 ? (yesVotes / totalVotes) * 100 : 0;
 
-            // CHECK IF USER ALREADY VOTED
+            const yesWidth = totalVotes > 0 ? (yesVotes / totalVotes) * 100 : 0;
+            const noWidth = totalVotes > 0 ? (noVotes / totalVotes) * 100 : 0;
+
+            const timeLeft = getTimeLeft(endTs);
+            const isExpired = endTs < now;
+            const programId = program.programId;  // <-- FIX missing reference
+
+            // Check if already voted
             let hasVoted = false;
             let userVoteWeight = 0;
+
             if (user) {
                 const [vRec] = PublicKey.findProgramAddressSync(
                     [Buffer.from("vote_record"), p.publicKey.toBuffer(), user.toBuffer()],
                     programId
                 );
-                const voteAcc: any = await program.account.voteRecord.fetchNullable(vRec);
+
+                const voteAcc = await program.account.voteRecord.fetchNullable(vRec);
+
                 if (voteAcc) {
                     hasVoted = true;
                     userVoteWeight = (voteAcc.amount?.toNumber() ?? 0) / 1e9;
                 }
             }
 
-            // ACTION BUTTON LOGIC
+            // Action Button Logic
             let actionHtml = "";
-            
-            // Case 1: Wallet Not Connected
+
             if (!user) {
                 actionHtml = `<button disabled class="w-full py-4 bg-white/5 text-gray-600 rounded-xl text-[10px] font-black uppercase cursor-not-allowed">Connect Wallet to Participate</button>`;
-            } 
-            // Case 2: User Already Voted
-            else if (hasVoted) {
+            } else if (hasVoted) {
                 actionHtml = `<div class="w-full py-4 bg-green-500/10 border border-green-500/20 text-green-500 rounded-xl text-center text-[10px] font-black uppercase italic">✓ Voted (${userVoteWeight.toFixed(2)} OLV)</div>`;
-            }
-            // Case 3: Proposal Active
-            else if (!isExpired) {
+            } else if (!isExpired) {
                 actionHtml = `
                     <div class="flex gap-3">
                         <button onclick="window.vote('${p.publicKey.toBase58()}', true)" class="flex-1 py-4 bg-green-500 text-black font-black rounded-xl text-xs uppercase hover:scale-[1.02] transition-transform">Support</button>
                         <button onclick="window.vote('${p.publicKey.toBase58()}', false)" class="flex-1 py-4 border border-white/10 text-white font-bold rounded-xl text-xs uppercase hover:bg-white/5 transition-all">Against</button>
                     </div>`;
-            }
-            // Case 4: Proposal Expired (Finalized)
-            else {
-                actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase italic">${isExecuted ? 'Proposal Executed' : 'Voting Closed'}</div>`;
+            } else {
+                actionHtml = `<div class="w-full py-4 bg-white/5 text-gray-500 rounded-xl text-center text-[10px] font-black uppercase italic">Voting Closed</div>`;
             }
 
             html += `
-                <div class="prop-card mb-4 p-6 glass rounded-[2rem] border border-white/5">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <span class="text-[9px] font-mono text-gray-500 uppercase tracking-widest">ID: ${p.publicKey.toBase58().slice(0, 8)}</span>
-                            <h4 class="text-xl font-black uppercase text-white">${data.description}</h4>
-                        </div>
-                        <span class="px-3 py-1 rounded-full text-[9px] font-black uppercase ${isExpired ? 'bg-white/5 text-gray-500' : 'bg-green-500/10 text-green-500'}">
-                            ${isExpired ? 'Finalized' : 'Active'}
-                        </span>
+                <div class="prop-card mb-4 p-6 glass rounded-[2.5rem] border border-white/5 animate-fade-in-up">
+                    <span class="text-[9px] text-gray-500 uppercase block mb-1">Ends: ${timeLeft}</span>
+                    <h4 class="text-xl font-black uppercase text-white mb-4">${data.description}</h4>
+
+                    <div class="h-1.5 w-full bg-white/5 rounded-full overflow-hidden mb-2 flex">
+                        <div class="h-full bg-green-500" style="width:${yesWidth}%"></div>
+                        <div class="h-full bg-red-500" style="width:${noWidth}%"></div>
                     </div>
-                    <div class="h-1 w-full bg-white/5 rounded-full overflow-hidden mb-2">
-                        <div class="h-full bg-green-500 transition-all duration-1000" style="width: ${yesPercentage}%"></div>
+
+                    <div class="flex justify-between text-[9px] font-bold uppercase mb-6">
+                        <span class="text-green-500">Support: ${yesVotes.toFixed(1)}</span>
+                        <span class="text-red-500">Against: ${noVotes.toFixed(1)}</span>
                     </div>
-                    <div class="flex justify-between text-[9px] font-bold text-gray-500 uppercase mb-6">
-                        <span>Support: ${yesVotes.toFixed(1)}</span>
-                        <span>Against: ${noVotes.toFixed(1)}</span>
-                    </div>
+
                     ${actionHtml}
                 </div>`;
         }
 
-        container.innerHTML = html || `<p class="text-center py-20 text-gray-600 uppercase text-[10px] font-black">No Proposals Found</p>`;
-    } catch (e) {
+        container.innerHTML = html || `<p class="text-center py-20 text-gray-600 uppercase text-[10px] font-black">No proposals found</p>`;
+    } 
+    catch (e) {
         console.error("Render Error:", e);
-        container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-[10px] uppercase">RPC Sync Error - Refresh Page</div>`;
+        container.innerHTML = `<div class="text-center py-10 text-red-500 font-black text-[10px] uppercase">RPC Error - Try Refresh</div>`;
     }
 };
-
-
 
 
 // --- MARKETPLACE CONFIG ---
@@ -562,6 +726,127 @@ const showXP = (x: number, y: number, text: string) => {
         console.error("Connection failed", err);
     }
 };
+
+
+
+///--- SHAKE NO EMPTY FIELDS ------
+
+
+// Helper to visually alert the user
+const flashError = (elId: string) => {
+    const el = document.getElementById(elId);
+    if (el) {
+        el.classList.add('border-red-500', 'animate-shake'); // Add CSS shake
+        setTimeout(() => el.classList.remove('border-red-500', 'animate-shake'), 1000);
+    }
+};
+/////-----STAKE OLV ---UNSTAKE OLV -------
+
+// --- STAKING LOGIC ---
+// --- STAKING GATEKEEPER ---
+
+const triggerGatekeeper = (el: HTMLInputElement) => {
+    // 1. Add shake and red border
+    el.classList.add('animate-shake');
+    
+    // 2. Play a subtle haptic/audio cue (optional)
+    console.warn("🚫 Action blocked: Field validation failed.");
+
+    // 3. Remove the class after animation finishes (0.3s) 
+    // so it can be triggered again on next click
+    setTimeout(() => {
+        el.classList.remove('animate-shake');
+    }, 400);
+};
+
+(window as any).processStake = async () => {
+    const input = document.getElementById('stake-amount') as HTMLInputElement;
+    const amount = parseFloat(input?.value || "0");
+
+    // UX GATEKEEPER
+    if (!input?.value || amount <= 0) {
+        console.log("🚫 Stake blocked: Empty Input");
+        showToast("⚠️ Please enter a stake amount");
+        markInvalid('stake-amount'); // <--- Triggers the Red Box & Shake
+        return; 
+    }
+    console.log("Initiating Staking Logic...");
+    try {
+        const program = getProgram();
+        const user = (window as any).solana.publicKey;
+        
+        // Derive necessary PDAs
+        const { stakeAccount, stakeVault } = getStakePDAs(user);
+        const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+
+        showToast(`Staking ${amount} OLV...`);
+
+        await program.methods
+            .stake(new anchor.BN(amount * 1e9))
+            .accounts({
+                dao: daoPDA,
+                stakeAccount: stakeAccount,
+                stakeVault: stakeVault,
+                user: user,
+                userTokenAccount: userATA, // Check IDL: if it fails, try 'userToken'
+                stakeMint: OLV_MINT,      // THIS WAS THE MISSING KEY
+                tokenProgram: TOKEN_PROGRAM_ID,
+                systemProgram: SystemProgram.programId,
+            })
+            .rpc();
+
+        showToast("✅ Staking Successful!");
+        input.value = "";
+        await syncUI(); 
+    } catch (e: any) {
+        console.error("Stake Error Details:", e);
+        showToast("Staking Failed");
+    }
+};
+
+(window as any).processUnstake = async () => {
+    const input = document.getElementById('unstake-amount') as HTMLInputElement;
+    const amount = parseFloat(input?.value || "0");
+
+    // UX GATEKEEPER
+    if (!input?.value || amount <= 0) {
+        console.log("🚫 Unstake blocked: Empty Input");
+        showToast("⚠️ Enter amount to unstake");
+        markInvalid('unstake-amount'); // <--- Triggers the Red Box & Shake
+        return;
+    }
+
+
+    console.log("Initiating Unstake Logic...");
+    try {
+        const program = getProgram();
+        const user = (window as any).solana.publicKey;
+        const { stakeAccount, stakeVault } = getStakePDAs(user);
+        const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+
+        showToast(`Unstaking ${amount} OLV...`);
+
+        await program.methods
+            .unstake(new anchor.BN(amount * 1e9))
+            .accounts({
+                dao: daoPDA,
+                stakeAccount: stakeAccount,
+                stakeVault: stakeVault,
+                user: user,
+                userToken: userATA,     // MATCHES YOUR ERROR: 'userToken'
+                tokenProgram: TOKEN_PROGRAM_ID,
+            })
+            .rpc();
+
+        showToast("✅ Unstaked Successfully!");
+        input.value = "";
+        await syncUI();
+    } catch (e: any) {
+        console.error("Unstake Error Details:", e);
+        showToast("Unstake Failed");
+    }
+};
+
 ////----RECLAIM -------
 (window as any).reclaimTokens = async (propId: string) => {
     try {

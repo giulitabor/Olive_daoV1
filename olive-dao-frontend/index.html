@@ -99,15 +99,108 @@
 </section>
 
 
-        <section id="view-voting" class="view-section hidden">
-            <h2 class="text-4xl font-black italic tracking-tighter uppercase mb-8">Governance</h2>
-            <div id="proposal-list" class="grid grid-cols-1 gap-4"></div>
-        </section>
+        <section id="view-voting" class="view-section hidden pt-10">
+    <div class="glass p-6 rounded-[2rem] border border-green-500/20 mb-10">
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-8 items-center">
+            <div class="border-r border-white/5 pr-4">
+                <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">My SOL</p>
+                <p id="gov-user-sol" class="text-lg font-black text-white">0.000</p>
+            </div>
+            <div class="border-r border-white/5 pr-4">
+                <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">My OLV</p>
+                <p id="gov-user-olv" class="text-lg font-black text-green-400">0.00</p>
+            </div>
+            <div class="border-r border-white/5 pr-4 text-orange-400">
+                <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">My Staked</p>
+                <p id="gov-user-staked" class="text-lg font-black">0.00</p>
+            </div>
+            <div class="border-r border-white/5 pr-4">
+                <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Treasury</p>
+                <p id="gov-vault-sol" class="text-lg font-black text-white">0.000 <span class="text-[10px] text-gray-600">SOL</span></p>
+            </div>
+            <div>
+                <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-1">Total Staked</p>
+                <p id="gov-total-staked" class="text-lg font-black text-green-500">0</p>
+            </div>
+        </div>
+    </div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-10">
+    <div class="glass p-6 rounded-[2rem] border border-green-500/20">
+    <h5 class="text-[10px] font-black uppercase tracking-widest text-green-500 mb-4">Stake OLV</h5>
+    <div class="flex gap-2">
+        <input type="number" 
+               id="stake-amount" 
+               placeholder="0.00" 
+               min="0.01"
+               step="0.01"
+               required
+               class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-green-500 transition-all">
+        <button onclick="window.processStake()" 
+                class="px-6 py-3 bg-green-500 text-black font-black rounded-xl text-[10px] uppercase">
+            Stake
+        </button>
+    </div>
+</div>
 
-        <section id="view-market" class="view-section hidden">
-            <h2 class="text-4xl font-black italic tracking-tighter uppercase mb-8">Tree Market</h2>
-            <div id="market-listings" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"></div>
-        </section>
+    <div class="glass p-6 rounded-[2rem] border border-red-500/10">
+        <h5 class="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-4">Withdraw Assets</h5>
+        <div class="flex gap-2">
+            <input type="number" 
+               id="stake-amount" 
+               placeholder="0.00" 
+               min="0.01"
+               step="0.01"
+               required
+               class="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm outline-none focus:border-green-500 transition-all">
+        <button onclick="window.processUnstake()" 
+                class="px-6 py-3 bg-green-500 text-black font-black rounded-xl text-[10px] uppercase">
+           Unstake
+            </button>
+        </div>
+    </div>
+</div>
+    <div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-8">
+        <div>
+            <h2 class="text-5xl font-black italic uppercase tracking-tighter leading-none">Governance</h2>
+            <div class="flex gap-4 mt-4">
+                <button onclick="window.filterProposals('active')" class="text-[10px] font-black uppercase tracking-widest text-green-400 border-b-2 border-green-500 pb-1">Active</button>
+                <button onclick="window.filterProposals('history')" class="text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-colors">History</button>
+            </div>
+        </div>
+        
+        <div class="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-xl border border-white/5">
+            <input type="checkbox" id="hide-rejected" onchange="window.renderProposals()" class="accent-green-500">
+            <label for="hide-rejected" class="text-[10px] font-black uppercase text-gray-400 cursor-pointer">Hide Rejected</label>
+        </div>
+<button onclick="window.openProposalModal()" class="bg-green-500 text-black px-6 py-3 rounded-xl font-black text-[10px] uppercase hover:scale-105 transition-all">
+                + New Proposal
+            </button>
+    </div>
+
+    <div id="proposal-list" class="grid grid-cols-1 gap-4"></div>
+</section>
+<div id="proposal-modal" class="fixed inset-0 bg-black/80 backdrop-blur-md hidden z-[200] items-center justify-center p-4">
+    <div class="glass w-full max-w-lg p-8 rounded-[2.5rem] border border-white/10 relative">
+        <button onclick="window.closeProposalModal()" class="absolute top-6 right-6 text-gray-500 hover:text-white font-black">CLOSE</button>
+        
+        <h3 class="text-3xl font-black italic uppercase tracking-tighter mb-2">Create Proposal</h3>
+        <p class="text-gray-500 text-[10px] font-bold uppercase tracking-widest mb-8 text-center">Stake 100 OLV minimum to propose</p>
+        
+        <div class="space-y-6">
+            <div>
+                <label class="text-[9px] font-black uppercase text-gray-400 block mb-2">Title</label>
+                <input type="text" id="prop-title" placeholder="e.g. Reforest Sector 9" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm focus:border-green-500 outline-none transition-all">
+            </div>
+            <div>
+                <label class="text-[9px] font-black uppercase text-gray-400 block mb-2">Grant Amount (SOL)</label>
+                <input type="number" id="prop-amount" placeholder="0.5" class="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-sm focus:border-green-500 outline-none transition-all">
+            </div>
+            <button onclick="window.submitProposal()" class="w-full bg-green-500 text-black py-5 rounded-2xl font-black uppercase text-xs hover:bg-green-400 transition-all shadow-lg shadow-green-500/20">
+                Submit to DAO
+            </button>
+        </div>
+    </div>
+</div>
 
     </main>
 
