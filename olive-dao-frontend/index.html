@@ -11,9 +11,6 @@
 
     <div id="fx-layer" class="fixed inset-0 pointer-events-none z-[100]"></div>
     
-    <div id="weather-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] px-6 py-2 rounded-full bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest animate-pulse shadow-[0_0_30px_rgba(249,115,22,0.4)] hidden">
-        ⚠️ HEATWAVE: WATER CONSUMPTION x3
-    </div>
 
     <nav class="fixed top-0 w-full z-50 bg-black/60 backdrop-blur-md border-b border-white/5">
         <div class="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
@@ -34,7 +31,7 @@
 
     <main class="pt-24 pb-20 px-6 max-w-5xl mx-auto">
 
-        <section id="view-home" class="view-section py-20">
+<section id="view-home" class="view-section min-h-[80vh] flex flex-col justify-center py-20">
             <div class="text-center mb-16">
                 <h2 class="text-6xl md:text-8xl font-black italic mb-6 tracking-tighter">THE FUTURE IS <span class="text-green-400">OLIVE.</span></h2>
                 <p class="text-gray-400 max-w-xl mx-auto text-lg leading-relaxed">Join a decentralized collective securing agricultural heritage through blockchain governance.</p>
@@ -53,7 +50,34 @@
         </section>
 
 <section id="view-game" class="view-section hidden pt-10">
-    
+<div id="weather-badge" class="hud-alert hidden">CRITICAL HEAT</div>
+    <div id="weather-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] px-6 py-2 rounded-full bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest animate-pulse shadow-[0_0_30px_rgba(249,115,22,0.4)] hidden">
+        ⚠️ HEATWAVE: WATER CONSUMPTION x3
+    </div>
+<div id="weather-hud" class="hud-sidebar">
+    <div class="flex flex-col items-center border-r border-white/10 pr-4">
+        <span id="display-time" class="font-black text-xl">00:00</span>
+        <img id="weather-icon" src="https://openweathermap.org/img/wn/01d.png" alt="weather" class="w-10 h-10">
+    </div>
+
+    <div class="grid grid-cols-2 gap-x-4 gap-y-1">
+        <div class="flex items-center gap-2">
+            <span>🌡️</span> <span id="stat-temp">--°C</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span>💧</span> <span id="stat-humidity">--%</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span>🌬️</span> <span id="stat-wind">-- m/s</span>
+        </div>
+        <div class="flex items-center gap-2">
+            <span>📍</span> <span id="stat-location">Loading...</span>
+        </div>
+    </div>
+<div>
+</div>
+</div>
+
     <div id="field-stats-bar" class="glass p-6 rounded-[2.5rem] border border-green-500/20 mb-10 flex flex-wrap justify-between items-center gap-6">
         
         <div class="flex gap-12">
@@ -79,10 +103,11 @@
                     <p class="text-xs font-black text-green-400"><span id="display-olv">0.00</span> <span class="text-[8px] text-gray-600">OLV</span></p>
                 </div>
             </div>
-            <button onclick="window.showView('market')" class="bg-white/5 px-4 py-2 rounded-xl text-[9px] font-black uppercase border border-white/5 hover:bg-white/10 transition-all">
-                Shop
-            </button>
-        </div>
+<button onclick="window.playClick(); window.openShop()" 
+    class="active:scale-95 hover:bg-white/10 bg-white/5 px-4 py-2 rounded-xl text-[9px] font-black uppercase border border-white/5 transition-all flex items-center gap-2 group">
+    <span class="group-hover:rotate-12 transition-transform">🛒</span> 
+    Grove Shop
+</button>
     </div>
 
     <div class="flex justify-between items-end mb-12">
@@ -96,6 +121,55 @@
     </div>
 
     <div id="grove-grid" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6"></div>
+<div id="modal-shop" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="modal-backdrop absolute inset-0 bg-black/90 backdrop-blur-md" onclick="window.closeShop()"></div>
+    <div class="glass w-full max-w-md p-8 rounded-[3rem] border border-white/10 relative z-10 animate-fade-in-up">
+        <div class="flex justify-between items-center mb-8">
+            <h3 class="text-2xl font-black uppercase text-white tracking-tighter">Grove Depot</h3>
+            <button onclick="window.closeShop()" class="text-gray-500 hover:text-white transition-colors">✕</button>
+        </div>
+
+        <div class="grid grid-cols-2 gap-3 mb-8">
+            <div class="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
+                <p class="text-[8px] uppercase font-black text-gray-500">Available</p>
+                <p id="shop-olv" class="text-lg font-black text-green-500">0.00</p>
+            </div>
+            <div class="bg-white/5 p-4 rounded-2xl border border-white/5 text-center">
+                <p class="text-[8px] uppercase font-black text-gray-500">Staked</p>
+                <p id="shop-staked" class="text-lg font-black text-green-400">0.00</p>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <div class="item-card bg-white/5 p-5 rounded-[2rem] border border-white/5 flex justify-between items-center">
+                <div>
+                    <h4 class="font-black text-white uppercase text-xs">Water Tank</h4>
+                    <p class="text-[9px] text-gray-500 leading-tight mt-1">Required for large groves (>10 trees).</p>
+                    <p class="text-[10px] font-black text-green-500 mt-1">25 OLV</p>
+                </div>
+                <button onclick="window.buyItem('tank', 25)" class="px-4 py-2 bg-green-500 text-black font-black text-[9px] rounded-xl uppercase">Buy</button>
+            </div>
+
+            <div class="item-card bg-white/5 p-5 rounded-[2rem] border border-white/5 flex justify-between items-center">
+                <div>
+                    <h4 class="font-black text-white uppercase text-xs">Pest Treatment</h4>
+                    <p class="text-[9px] text-gray-500 mt-1">Instant disease recovery.</p>
+                    <p class="text-[10px] font-black text-green-500 mt-1">5 OLV</p>
+                </div>
+                <button onclick="window.buyItem('pest', 5)" class="px-4 py-2 bg-green-500 text-black font-black text-[9px] rounded-xl uppercase">Buy</button>
+            </div>
+
+            <div class="item-card bg-white/5 p-5 rounded-[2rem] border border-white/5 flex justify-between items-center">
+                <div>
+                    <h4 class="font-black text-white uppercase text-xs">Fertilizer Kit</h4>
+                    <p class="text-[9px] text-gray-500 mt-1">+20% Growth speed (1hr).</p>
+                    <p class="text-[10px] font-black text-green-500 mt-1">10 OLV</p>
+                </div>
+                <button onclick="window.buyItem('fert', 10)" class="px-4 py-2 bg-green-500 text-black font-black text-[9px] rounded-xl uppercase">Buy</button>
+            </div>
+        </div>
+    </div>
+</div>
 </section>
 
 
@@ -146,7 +220,7 @@
         <h5 class="text-[10px] font-black uppercase tracking-widest text-gray-500 mb-4">Withdraw Assets</h5>
         <div class="flex gap-2">
             <input type="number" 
-               id="stake-amount" 
+               id="unstake-amount" 
                placeholder="0.00" 
                min="0.01"
                step="0.01"

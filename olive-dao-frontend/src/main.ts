@@ -21,6 +21,7 @@ const getStakePDAs = (userPubkey: PublicKey) => {
 };
 
 // --- GLOBAL GAME STATE ------ 1. GLOBAL HELPERS (Add these at the top level) ---
+
 const getOracleData = () => {
     const oracleRaw = localStorage.getItem('olive_oracle_data');
     // Default to 25 degrees if no data exists
@@ -35,6 +36,62 @@ const getCurrentWeather = () => {
     return oracleRaw ? JSON.parse(oracleRaw) : { temp: 25 };
 };
 
+const gameState = {
+    weather: {
+        temp: 0,
+        humidity: 0,
+        wind: 0,
+        condition: 'CLEAR', // Added to prevent .includes() crash
+        conditionCode: 0,
+        timeStr: 'NIGHT',
+        seasonStr: 'WINTER',
+        isHeatwave: false
+    },
+    lastFetch: 0
+};
+
+
+const playSound = (freq: number, type: OscillatorType = 'sine', duration: number = 0.1) => {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+};
+
+
+(window as any).playClick = () => {
+    const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(440, audioCtx.currentTime); // A4 note
+    gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.1);
+
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.1);
+};
+// Hook these into your button
+(window as any).playClick = () => playSound(440, 'sine', 0.05); // Subtle tap
+(window as any).playSuccess = () => {
+    playSound(523.25, 'sine', 0.1); // C5
+    setTimeout(() => playSound(659.25, 'sine', 0.1), 100); // E5
+};
 
 // --- HOOK INTO NAVIGATION UI---
 const originalShowView = (window as any).showView;
@@ -316,6 +373,12 @@ const markInvalid = (elId: string) => {
         modal.classList.remove('flex');
     }
 };
+// Define a default state so the app doesn't crash on load
+const currentEnv = {
+    time: 'NIGHT',
+    season: 'WINTER',
+    isHeatwave: false
+};
 
 
 (window as any).setVotingTab = (tab: string) => {
@@ -535,7 +598,9 @@ const PRICE_OLV = 100;
 
 ///// -----------FANTGAME---------
 // --- THE OLIVE GROWER ENGINE ---
+
 // --- 1. CONSOLIDATED GLOBAL STATS ENGINE ---
+
 
 const updateGlobalFieldStats = () => {
     const statsBar = document.getElementById('field-stats-bar');
@@ -575,6 +640,267 @@ const updateGlobalFieldStats = () => {
         diffEl.className = `text-xl font-black ${overgrownCount > 0 ? 'text-red-500' : 'text-green-400'}`;
     }
 };
+
+
+// --- SHOP LOGIC ---
+// --- SHOP INTERFACE ---
+(window as any).openShop = () => {
+    console.log("🛒 Opening Shop...");
+
+    // 1. Get values from main labels
+    const walletOlv = document.getElementById('display-olv')?.innerText || "0.00";
+    const stakedOlv = document.getElementById('gov-user-staked')?.innerText || "0.00";
+    
+    // 2. Update Shop IDs
+    const shopOlvEl = document.getElementById('shop-olv');
+    const shopStakedEl = document.getElementById('shop-staked');
+    
+    if (shopOlvEl) shopOlvEl.innerText = walletOlv;
+    if (shopStakedEl) shopStakedEl.innerText = stakedOlv;
+
+    // 3. Toggle Visibility
+    const modal = document.getElementById('modal-shop');
+    if (modal) {
+        modal.classList.remove('hidden');
+        // Play click sound if defined
+        if (typeof (window as any).playClick === 'function') {
+            (window as any).playClick();
+        }
+    } else {
+        console.error("❌ Modal 'modal-shop' not found");
+    }
+};
+const syncEnvironment = (env: any) => {
+    // 🛑 THE FIX: If env is missing, default to a safe object so it doesn't crash
+    if (!env) {
+        console.warn("🌍 Env Sync: No data provided, using defaults.");
+        env = { time: 'DAY', season: 'SUMMER', isHeatwave: false };
+    }
+
+    const gameView = document.getElementById('view-game');
+    if (!gameView) return;
+
+    // 1. Remove old classes
+    const envClasses = ['time-night', 'time-day', 'time-dawn', 'time-dusk', 'season-winter', 'season-autumn', 'heatwave-active'];
+    gameView.classList.remove(...envClasses);
+
+    // 2. Apply new classes safely
+    if (env.time) gameView.classList.add(`time-${env.time.toLowerCase()}`);
+    if (env.season) gameView.classList.add(`season-${env.season.toLowerCase()}`);
+
+    console.log(`🌍 Game View Sync: ${env.season} | ${env.time}`);
+    
+    // 3. Weather Banner
+    const banner = document.getElementById('weather-banner');
+    if (env.isHeatwave) {
+        banner?.classList.remove('hidden');
+        gameView.classList.add('heatwave-active');
+    } else {
+        banner?.classList.add('hidden');
+    }
+};
+
+// --- INITIAL SYNC ---
+// Pass the object into the function!
+syncEnvironment(currentEnv); 
+
+// Update every minute
+setInterval(() => syncEnvironment(currentEnv), 60000);
+
+(window as any).closeShop = () => {
+    document.getElementById('modal-shop')?.classList.add('hidden');
+};
+(window as any).closeShop = () => {
+    document.getElementById('modal-shop')?.classList.add('hidden');
+};
+(window as any).buyItem = async (item: string, price: number) => {
+    const currentOlv = parseFloat(document.getElementById('display-olv')?.innerText || "0");
+
+    if (currentOlv < price) {
+        playSound(150, 'sawtooth', 0.2); // Low buzz for error
+        showToast("❌ Not enough OLV");
+        markInvalid('shop-bal-container');
+        return;
+    }
+
+    // Success!
+    (window as any).playSuccess(); 
+    showToast(`Purchased ${item}!`);
+    
+    // ... logic to update inventory ...
+    await syncUI();
+};
+
+// Initial Sync
+syncEnvironment();
+setInterval(syncEnvironment, 60000); // Re-sync every minute
+
+
+
+async function updateLiveWeather() {
+    // NYC Coords for testing
+    const LAT = 43.1027715; 
+    const LON = 10.5408628;
+
+    try {
+        console.log("📡 Requesting Open-Meteo...");
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&current=temperature_2m,relative_humidity_2m,is_day,weather_code,wind_speed_10m&timezone=auto`;
+        
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.current) throw new Error("API response missing 'current' data");
+
+        const c = data.current;
+
+        // 1. Update the Central State
+        gameState.weather.temp = Math.round(c.temperature_2m);
+        gameState.weather.humidity = c.relative_humidity_2m;
+        gameState.weather.wind = Math.round(c.wind_speed_10m);
+        gameState.weather.timeStr = c.is_day === 1 ? 'DAY' : 'NIGHT';
+        
+        // Map WMO Codes (Snow: 71, 73, 75)
+        const isSnowy = [71, 73, 75, 77, 85, 86].includes(c.weather_code);
+        gameState.weather.seasonStr = (gameState.weather.temp < 10 || isSnowy) ? 'WINTER' : 'SUMMER';
+
+        // 2. IMMEDIATE UI UPDATE (Fill the placeholders)
+        const tempEl = document.getElementById('stat-temp');
+        const humEl = document.getElementById('stat-humidity');
+        const windEl = document.getElementById('stat-wind');
+        const locEl = document.getElementById('stat-location');
+
+        if (tempEl) tempEl.innerText = `${gameState.weather.temp}°C`;
+        if (humEl) humEl.innerText = `${gameState.weather.humidity}%`;
+        if (windEl) windEl.innerText = `${gameState.weather.wind} m/s`;
+        if (locEl) locEl.innerText = `${gameState.weather.locale}`;
+
+        console.log("✅ Weather state updated:", gameState.weather);
+        
+    } catch (e) {
+        console.error("❌ Weather Fetch Failed:", e);
+        if (document.getElementById('stat-location')) {
+            document.getElementById('stat-location')!.innerText = "Offline";
+        }
+    }
+}
+function syncGameUI() {
+    const gameView = document.getElementById('view-game');
+    const badge = document.getElementById('weather-badge'); // Defined once here
+    const icon = document.getElementById('weather-icon') as HTMLImageElement;
+    // Add this inside syncGameUI after the season logic
+if (gameState.weather.conditionCode >= 51) {
+    gameView.classList.add('is-raining');
+}
+    if (!gameView) return;
+
+    // 🛑 SAFETY CHECK
+    if (!gameState.weather.timeStr || !gameState.weather.seasonStr) {
+        console.warn("⏳ syncGameUI: Weather strings not ready yet...");
+        return;
+    }
+
+    // 1. Update data text
+    const tempEl = document.getElementById('stat-temp');
+    const humEl = document.getElementById('stat-humidity');
+    const windEl = document.getElementById('stat-wind');
+
+    if (tempEl) tempEl.innerText = `${gameState.weather.temp}°C`;
+    if (humEl) humEl.innerText = `${gameState.weather.humidity}%`;
+    if (windEl) windEl.innerText = `${gameState.weather.wind} m/s`;
+
+    // 2. Environmental Visuals
+    // Reset classes to base, then add dynamic ones
+    gameView.className = 'view-section py-20 min-h-screen relative overflow-hidden'; 
+    gameView.classList.add(`time-${gameState.weather.timeStr.toLowerCase()}`);
+    gameView.classList.add(`season-${gameState.weather.seasonStr.toLowerCase()}`);
+
+    // 3. Heatwave Logic
+    if (gameState.weather.temp > 35) {
+        gameView.classList.add('heatwave-active');
+        badge?.classList.remove('hidden');
+    } else {
+        badge?.classList.add('hidden');
+    }
+
+    // 4. Update Icon based on Day/Night
+    const suffix = gameState.weather.isDay ? 'd' : 'n';
+    let iconCode = '01'; 
+    if (gameState.weather.conditionCode >= 1 && gameState.weather.conditionCode <= 3) iconCode = '02';
+    if (gameState.weather.conditionCode >= 51) iconCode = '09'; // Rain
+    
+    if (icon) {
+        icon.src = `https://openweathermap.org/img/wn/${iconCode}${suffix}.png`;
+    }
+}
+// --- START THE ENGINE ---
+const initGameEngine = async () => {
+    // 1. First fetch
+    await updateLiveWeather();
+
+    // 2. The single Master Interval
+    setInterval(async () => {
+        // A. Weather Refresh (Every 15 mins)
+        if (Date.now() - gameState.lastFetch > 900000) {
+            await updateLiveWeather();
+            gameState.lastFetch = Date.now();
+        }
+
+        // B. Tree Decay Logic
+        const isRaining = gameState.weather.condition.includes("RAIN");
+        
+        myGrove.forEach(tree => {
+            let decay = gameState.weather.isHeatwave ? 7 : 2;
+            if (isRaining) decay = -4; // Rain replenishes water
+            
+            tree.water = Math.max(0, Math.min(100, (tree.water || 0) - decay));
+            if (tree.water === 0) tree.health = Math.max(0, (tree.health || 100) - 2);
+        });
+
+        // C. UI Updates
+        syncGameUI();
+        saveAndRender(); 
+        
+    }, 5000); 
+};
+
+initGameEngine();
+// --- THE MASTER ENGINE ---
+setInterval(async () => {
+    const now = new Date();
+
+    // 1. Clock Update
+    const timeDisplay = document.getElementById('display-time');
+    if (timeDisplay) {
+        timeDisplay.innerText = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+    }
+
+    // 2. Fetch Weather (Every 10 Minutes)
+    // We use your lat/lon (example: 40.7128, -74.0060 for NYC)
+    if (!gameState.lastFetch || (Date.now() - gameState.lastFetch > 600000)) {
+        await updateLiveWeather(43.1027715,10.5408628);
+        gameState.lastFetch = Date.now();
+    }
+
+    // 3. Process Tree Dynamics
+    const isRaining = gameState.weather.condition.includes("RAIN") || gameState.weather.condition.includes("SHOWERS");
+    
+    myGrove.forEach(tree => {
+        let decayRate = gameState.weather.isHeatwave ? 7 : 2;
+        if (isRaining) decayRate = -3; // Rain replenishes water!
+
+        tree.water = Math.max(0, Math.min(100, tree.water - decayRate));
+        if (tree.water === 0) tree.health = Math.max(0, tree.health - 3);
+        if (Math.random() > 0.99) tree.isOvergrown = true;
+    });
+
+    // 4. Final UI Sync
+    syncGameUI();
+    saveAndRender(); 
+}, 5000);
+// Fetch weather every 10 minutes
+updateLiveWeather();
+setInterval(updateLiveWeather, 600000);
+
 
 // --- 2. THE MASTER GAME LOOP ---
 setInterval(() => {
@@ -758,52 +1084,68 @@ const triggerGatekeeper = (el: HTMLInputElement) => {
         el.classList.remove('animate-shake');
     }, 400);
 };
-
 (window as any).processStake = async () => {
     const input = document.getElementById('stake-amount') as HTMLInputElement;
-    const amount = parseFloat(input?.value || "0");
+    const amountStr = input?.value || "0";
+    const amount = parseFloat(amountStr);
 
-    // UX GATEKEEPER
-    if (!input?.value || amount <= 0) {
+    // 1. UX GATEKEEPER
+    if (!amountStr || amount <= 0) {
         console.log("🚫 Stake blocked: Empty Input");
         showToast("⚠️ Please enter a stake amount");
-        markInvalid('stake-amount'); // <--- Triggers the Red Box & Shake
+        // Ensure this function exists in your main.ts to apply the .input-error class
+        (window as any).markInvalid('stake-amount'); 
         return; 
     }
+
     console.log("Initiating Staking Logic...");
+    
     try {
         const program = getProgram();
-        const user = (window as any).solana.publicKey;
+        const userPubKey = (window as any).solana.publicKey; // Get the user's wallet address
+
+        if (!userPubKey) {
+            showToast("❌ Please connect wallet first");
+            return;
+        }
+
+        // 2. DERIVE NECESSARY ACCOUNTS
+        const { stakeAccount, stakeVault } = getStakePDAs(userPubKey);
         
-        // Derive necessary PDAs
-        const { stakeAccount, stakeVault } = getStakePDAs(user);
-        const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+        // Sync version is faster/cleaner here
+        const userATA = getAssociatedTokenAddressSync(OLV_MINT, userPubKey);
 
         showToast(`Staking ${amount} OLV...`);
 
+        // 3. SEND TRANSACTION
+        // Note: Check your Rust/Anchor code. Most use .accounts({ userToken: ... }) 
+        // I have included both common names below; remove the one your IDL doesn't use.
         await program.methods
-            .stake(new anchor.BN(amount * 1e9))
+            .stake(new anchor.BN(amount * 10**9)) 
             .accounts({
-                dao: daoPDA,
-                stakeAccount: stakeAccount,
-                stakeVault: stakeVault,
-                user: user,
-                userTokenAccount: userATA, // Check IDL: if it fails, try 'userToken'
-                stakeMint: OLV_MINT,      // THIS WAS THE MISSING KEY
+                user: userPubKey,               // The signer
+                userToken: userATA,             // The user's OLV wallet
+                dao: daoPDA,                    // Your Global State/DAO account
+                stakeAccount: stakeAccount,     // The PDA storing user stake info
+                stakeVault: stakeVault,         // The PDA holding the actual tokens
+                stakeMint: OLV_MINT,            
                 tokenProgram: TOKEN_PROGRAM_ID,
                 systemProgram: SystemProgram.programId,
+                // rent: anchor.web3.SYSVAR_RENT_PUBKEY, // Add if your program requires it
             })
             .rpc();
 
         showToast("✅ Staking Successful!");
-        input.value = "";
-        await syncUI(); 
+        input.value = ""; // Clear input
+        await syncUI();   // Update balances globally
+        
     } catch (e: any) {
         console.error("Stake Error Details:", e);
-        showToast("Staking Failed");
+        // Better error reporting for the user
+        const errorMsg = e.message || "Staking Failed";
+        showToast(`❌ ${errorMsg.slice(0, 30)}...`);
     }
 };
-
 (window as any).processUnstake = async () => {
     const input = document.getElementById('unstake-amount') as HTMLInputElement;
     const amount = parseFloat(input?.value || "0");
@@ -961,13 +1303,21 @@ const updateActionState = (isConnected: boolean) => {
 
 
 (window as any).showView = (viewId: string) => {
+// 1. Hide every single section
+    document.querySelectorAll('.view-section').forEach(section => {
+        section.classList.add('hidden');
+    });
+
+    // 2. Show only the one you want
+    const activeView = document.getElementById(viewId);
+    if (activeView) activeView.classList.remove('hidden');
     const sections = document.querySelectorAll('.view-section');
     sections.forEach(s => {
         s.classList.add('hidden', 'opacity-0');
         s.style.transform = "translateY(10px)";
     });
 
-    const active = document.getElementById(`view-${viewId}`);
+  //  const active = document.getElementById(`view-${viewId}`);
     if (active) {
         active.classList.remove('hidden');
         // Small timeout to trigger CSS transition

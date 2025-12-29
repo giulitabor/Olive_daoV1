@@ -1,0 +1,200 @@
+import './polyfill'; 
+import { Connection, PublicKey, clusterApiUrl, LAMPORTS_PER_SOL, SystemProgram, Keypair } from "@solana/web3.js";
+import { getAssociatedTokenAddressSync, TOKEN_PROGRAM_ID } from "@solana/spl-token";
+import * as anchor from "@coral-xyz/anchor";
+import idl from "./idl.json";
+
+/**
+ * OLIVE DAO: MAIN ENGINE
+ * Fixes: Scope errors (oracle), HUD alignment, and OLV Balance sync.
+ */
+
+// --- 1. GLOBALS & CONSTANTS ---
+const OLV_MINT = new PublicKey("6nab5Rttp45AfjaYrdwGxKuH9vK9RKCJdeaBvQJt8pLA");
+const programId = new PublicKey("8MdiqqhZj1badeLArqCmZWeiWGK8tXQWiydRLcqzDn45");
+const connection = new Connection(clusterApiUrl("devnet"), "confirmed");
+
+const [daoPDA] = PublicKey.findProgramAddressSync([Buffer.from("dao")], programId);
+const [vaultPDA] = PublicKey.findProgramAddressSync([Buffer.from("vault")], programId);
+
+// State Management
+let myGrove: any[] = JSON.parse(localStorage.getItem('my_grove') || '[]');
+
+// --- 2. CORE UTILITY FUNCTIONS (Defined first to prevent ReferenceErrors) ---
+
+/**
+ * CRITICAL FIX: This replaces the 'oracle' variable that was crashing your script.
+ * Every function now calls this to get fresh weather data.
+ */
+const getOracleData = () => {
+    const oracleRaw = localStorage.getItem('olive_oracle_data');
+    return oracleRaw ? JSON.parse(oracleRaw) : { temp: 25 }; // Default to 25c if not found
+};
+
+const showToast = (message: string) => {
+    let container = document.getElementById('toast-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'toast-container';
+        document.body.appendChild(container);
+    }
+    const toast = document.createElement('div');
+    toast.className = 'glass border-l-4 border-green-500 p-4 mb-2 rounded shadow-2xl animate-fade-in-up';
+    toast.innerText = message;
+    container.appendChild(toast);
+    setTimeout(() => toast.remove(), 4000);
+};
+
+const showXP = (x: number, y: number, text: string) => {
+    const el = document.createElement('div');
+    el.className = 'fixed font-black text-green-400 pointer-events-none z-[100] animate-float-up text-xs';
+    el.style.left = `${x}px`;
+    el.style.top = `${y}px`;
+    el.innerText = text;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), 1000);
+};
+
+// --- 3. UI & VIEW MANAGEMENT ---
+
+(window as any).showView = (viewId: string) => {
+    console.log("Navigating to:", viewId);
+    
+    // Hide all sections
+    document.querySelectorAll('.view-section').forEach(s => s.classList.add('hidden'));
+    
+    const activeView = document.getElementById(`view-${viewId}`);
+    if (activeView) activeView.classList.remove('hidden');
+
+    // UI/UX FIX: Only show HUD in the game frame
+    const hud = document.getElementById('field-stats-bar');
+    if (hud) {
+        viewId === 'game' ? hud.classList.remove('hidden') : hud.classList.add('hidden');
+    }
+
+    // Contextual renders
+    if (viewId === 'game') (window as any).renderGrove();
+    if (viewId === 'market') (window as any).renderMarketplace();
+    if (viewId === 'voting') (window as any).renderProposals();
+};
+
+/**
+ * Syncs SOL and OLV balances to the HUD
+ */
+const syncUI = async () => {
+    const user = (window as any).solana?.publicKey;
+    if (!user) return;
+
+    try {
+        const updateText = (id: string, val: string | number) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val.toString();
+        };
+
+        // Fetch SOL
+        const solBal = await connection.getBalance(user);
+        updateText('display-sol', (solBal / LAMPORTS_PER_SOL).toFixed(3));
+
+        // Fetch OLV (SPL Token)
+        try {
+            const userATA = getAssociatedTokenAddressSync(OLV_MINT, user);
+            const tokenBal = await connection.getTokenAccountBalance(userATA);
+            updateText('display-olv', tokenBal.value.uiAmountString || "0");
+        } catch (e) {
+            // User likely has no OLV account yet
+            updateText('display-olv', "0.00");
+        }
+    } catch (e) {
+        console.warn("Sync Error:", e);
+    }
+};
+
+/**
+ * Updates internal game stats in the HUD
+ */
+const updateGlobalFieldStats = () => {
+    if (!myGrove || myGrove.length === 0) return;
+
+    const totalCO2 = myGrove.reduce((acc, t) => acc + (t.level * 0.5), 0);
+    const avgHealth = myGrove.reduce((acc, t) => acc + t.health, 0) / myGrove.length;
+
+    const co2El = document.getElementById('co2-total');
+    const healthEl = document.getElementById('field-health');
+
+    if (co2El) co2El.innerText = `${totalCO2.toFixed(2)} kg`;
+    if (healthEl) {
+        healthEl.innerText = `${Math.round(avgHealth)}%`;
+        healthEl.style.color = avgHealth < 40 ? '#ef4444' : '#4ade80';
+    }
+};
+
+// --- 4. GAME ENGINE ---
+
+(window as any).renderGrove = () => {
+    const grid = document.getElementById('grove-grid');
+    if (!grid) return;
+
+    grid.innerHTML = myGrove.map(tree => {
+        const icon = tree.level === 1 ? '🌱' : tree.level === 2 ? '🌿' : '🌳';
+        return `
+            <div class="glass p-6 rounded-[2rem] border border-white/5 relative group transition-all">
+                <div class="absolute top-4 right-4 text-[8px] font-black text-white/20">LVL ${tree.level}</div>
+                <div class="text-center py-8 cursor-pointer" onclick="window.tendTree(${tree.id}, 'water', event)">
+                    <span class="text-7xl block transition-transform group-hover:scale-110">${icon}</span>
+                </div>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-end">
+                        <p class="text-[9px] font-bold ${tree.water < 30 ? 'text-red-400' : 'text-blue-400'}">${tree.water}% H2O</p>
+                        <p class="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Health: ${tree.health}%</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <button onclick="window.tendTree(${tree.id}, 'water', event)" class="py-2 bg-blue-500/10 text-blue-400 rounded-lg text-[9px] font-black uppercase hover:bg-blue-500 hover:text-white transition-all">Water</button>
+                        <button onclick="window.tendTree(${tree.id}, 'prune', event)" class="py-2 bg-green-500/10 text-green-400 rounded-lg text-[9px] font-black uppercase hover:bg-green-500 hover:text-black transition-all">Prune</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+    updateGlobalFieldStats();
+};
+
+(window as any).plantSeedling = () => {
+    myGrove.push({ id: Date.now(), health: 100, water: 100, xp: 0, level: 1 });
+    saveAndRender();
+};
+
+// --- 5. MASTER LOOP & WALLET ---
+
+setInterval(() => {
+    const weather = getOracleData();
+    const isHeatwave = weather.temp > 35;
+
+    // Update Banner
+    const banner = document.getElementById('weather-banner');
+    if (banner) isHeatwave ? banner.classList.remove('hidden') : banner.classList.add('hidden');
+
+    // Tree Decay
+    myGrove.forEach(tree => {
+        const decayRate = isHeatwave ? 8 : 2;
+        tree.water = Math.max(0, tree.water - decayRate);
+        if (tree.water === 0) tree.health = Math.max(0, tree.health - 4);
+    });
+
+    saveAndRender();
+    if ((window as any).solana?.isConnected) syncUI();
+}, 5000);
+
+(window as any).connectWallet = async () => {
+    try {
+        const resp = await (window as any).solana.connect();
+        showToast("Connected: " + resp.publicKey.toString().slice(0, 6));
+        await syncUI();
+        (window as any).showView('game');
+    } catch (err) {
+        console.error("Wallet Error", err);
+    }
+};
+
+window.addEventListener('load', () => {
+    if ((window as any).solana?.isConnected) syncUI();
+});
