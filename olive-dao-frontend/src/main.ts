@@ -94,19 +94,41 @@ const playSound = (freq: number, type: OscillatorType = 'sine', duration: number
 };
 
 // --- HOOK INTO NAVIGATION UI---
-const originalShowView = (window as any).showView;
-(window as any).showView = (viewId: string) => {
-    console.log("Switching to view:", viewId);
+const originalShowView = (window as any).showView;window.showView = (viewId: string) => {
+    console.log("Switching to:", viewId);
+
+    // 1. Hide all main view sections
     document.querySelectorAll('.view-section').forEach(section => {
         section.classList.add('hidden');
     });
-    const activeView = document.getElementById(`view-${viewId}`);
-    if (activeView) activeView.classList.remove('hidden');
 
-    // Trigger specific renders
-    if (viewId === 'game') (window as any).renderGrove();
-    if (viewId === 'market') (window as any).renderMarketplace();
-    if (viewId === 'voting') (window as any).renderProposals();
+    // 2. Show the target section
+    const target = document.getElementById(`view-${viewId}`);
+    if (target) target.classList.remove('hidden');
+
+    // 3. FORCE HUD VISIBILITY (The Fix)
+    // Identify all elements that are "floating" (Weather, Stats, Tree Grid)
+    const gameSpecificElements = [
+        'weather-hud', 
+        'field-stats-overlay', 
+        'grove-grid', 
+        'weather-banner'
+    ];
+window.syncWalletUI();
+    gameSpecificElements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            // Only show these if the current view is 'game'
+            el.style.display = (viewId === 'game') ? 'flex' : 'none';
+        }
+    });
+
+    // 4. Update Navigation Colors
+    document.querySelectorAll('nav button, .mobile-nav button').forEach(btn => {
+        const isActive = btn.getAttribute('onclick')?.includes(`'${viewId}'`);
+        btn.classList.toggle('text-green-400', isActive);
+        btn.classList.toggle('text-gray-500', !isActive);
+    });
 };
 
 
@@ -164,8 +186,43 @@ const getTimeLeft = (endTs: number) => {
 
 // --- UI REFRESH ---
 const syncUI = async () => {
+// 1. Always sync global data first
+    await syncGlobalData();
     const user = (window as any).solana?.publicKey;
-    if (!user) return;
+    
+    // 1. IF NO WALLET CONNECTED: Reset and Exit
+    if (!user) {
+        console.log("[UI] No wallet connected. Resetting personal balances...");
+        
+        // Wipe "My" personal fields only (keep Treasury/Total Staked)
+        const personalFields = ['gov-user-sol', 'gov-user-olv', 'gov-user-staked', 'display-sol', 'display-olv', 'shop-olv'];
+        personalFields.forEach(id => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = id.includes('sol') ? "0.000" : "0.00";
+        });
+
+        // Lock all inputs
+        const actionElements = document.querySelectorAll('#view-voting input, #view-voting button, #view-game button');
+        actionElements.forEach(el => {
+            const item = el as HTMLButtonElement | HTMLInputElement;
+            // Don't disable the view filters (Active/History)
+            if (!['ACTIVE', 'HISTORY'].includes(item.innerText?.toUpperCase())) {
+                item.disabled = true;
+                item.style.opacity = "0.3";
+            }
+        });
+        return; // Stop the function here
+    }
+
+    // 2. IF WALLET CONNECTED: Fetch real data
+    console.log("[UI] Wallet detected. Fetching balances for:", user.toString());
+    
+    // Re-enable everything
+    const allElements = document.querySelectorAll('button, input');
+    allElements.forEach(el => {
+        (el as HTMLButtonElement).disabled = false;
+        (el as HTMLElement).style.opacity = "1";
+    });
 
 //////////////---NEW -----------
 
@@ -254,6 +311,44 @@ try {
         }
     } catch (e) {
         console.warn("Sync UI Warning:", e);
+    }
+};
+
+// --- GLOBAL STATS (Public Data & Oracle) ---
+// This function runs for everyone, wallet connected or not.
+// --- GLOBAL STATS (Public Data & Oracle) ---
+const syncGlobalData = async () => {
+    try {
+        // A. ON-CHAIN DATA (Treasury & Staking)
+        // We use the global 'connection' and 'daoPDA' defined in main.ts
+        const provider = new anchor.AnchorProvider(connection, (window as any).solana, { preflightCommitment: "confirmed" });
+        const program = new anchor.Program(idl as any, provider);
+        
+        const daoData: any = await program.account.dao.fetch(daoPDA);
+        const vaultBal = await connection.getBalance(vaultPDA);
+
+        const vBalEl = document.getElementById('vault-balance');
+        const tStakedEl = document.getElementById('total-staked');
+
+        if (vBalEl) vBalEl.innerText = (vaultBal / LAMPORTS_PER_SOL).toFixed(4);
+        if (tStakedEl) tStakedEl.innerText = (daoData.totalStaked.toNumber() / 1e9).toLocaleString();
+
+        // B. ORACLE DATA (CO2 & Harvest from Oracle Terminal)
+        const oracleRaw = localStorage.getItem('olive_oracle_data');
+        if (oracleRaw) {
+            const oracle = JSON.parse(oracleRaw);
+            
+            const co2El = document.getElementById('total-co2');
+            const harvestEl = document.getElementById('harvest-liters');
+
+            // Ensure we use the exact keys from your pushOracleData() function
+            if (co2El && oracle.co2) co2El.innerText = Number(oracle.co2).toLocaleString();
+            if (harvestEl && oracle.harvest) harvestEl.innerText = Number(oracle.harvest).toLocaleString();
+            
+            console.log("📡 Oracle Stats Synced:", oracle);
+        }
+    } catch (e) {
+        console.warn("Global Sync Warning:", e);
     }
 };
 
@@ -1302,35 +1397,75 @@ const updateActionState = (isConnected: boolean) => {
 };
 
 
-(window as any).showView = (viewId: string) => {
-// 1. Hide every single section
+window.showView = (viewId: string) => {
+    console.log(`%c[VIEW-DEBUG] Switching to: ${viewId}`, 'color: #10b981; font-weight: bold; font-size: 14px;');
+
+    // 1. Hide ALL sections
     document.querySelectorAll('.view-section').forEach(section => {
         section.classList.add('hidden');
+        // Aggressive JS hide for safety
+        (section as HTMLElement).style.display = 'none';
     });
 
-    // 2. Show only the one you want
-    const activeView = document.getElementById(viewId);
-    if (activeView) activeView.classList.remove('hidden');
-    const sections = document.querySelectorAll('.view-section');
-    sections.forEach(s => {
-        s.classList.add('hidden', 'opacity-0');
-        s.style.transform = "translateY(10px)";
-    });
-
-  //  const active = document.getElementById(`view-${viewId}`);
-    if (active) {
-        active.classList.remove('hidden');
-        // Small timeout to trigger CSS transition
-        setTimeout(() => {
-            active.classList.remove('opacity-0');
-            active.style.transform = "translateY(0)";
-            active.classList.add('transition-all', 'duration-500');
-        }, 10);
+    // 2. Show Target Section
+    const target = document.getElementById(`view-${viewId}`);
+    if (target) {
+        target.classList.remove('hidden');
+        target.style.display = 'block';
+        console.log(`[VIEW-DEBUG] Section "view-${viewId}" is now VISIBLE`);
     }
-    
-    if (viewId === 'voting') (window as any).renderProposals();
-};
 
+    // 3. THE "GHOST" KILLER (Elements that leak into Home/Gov)
+    // We target the IDs that you are seeing on the Home page right now.
+    const elementsToKill = [
+        'weather-hud', 
+        'field-stats-bar', 
+        'grove-grid', 
+        'weather-banner', 
+        'weather-badge'
+    ];
+
+    elementsToKill.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+            const isGameView = (viewId === 'game');
+            el.style.display = isGameView ? 'flex' : 'none';
+            if (isGameView) el.classList.remove('hidden');
+            else el.classList.add('hidden');
+            
+            console.log(`[VIEW-DEBUG] HUD Element "${id}" set to: ${isGameView ? 'VISIBLE' : 'HIDDEN'}`);
+        } else {
+            console.warn(`[VIEW-DEBUG] Element "${id}" not found. Check your HTML IDs!`);
+        }
+    });
+
+    // 4. GOVERNANCE TAB LOCKDOWN
+    const isConnected = !!(window as any).solana?.isConnected;
+    if (viewId === 'voting') {
+        console.log(`[VIEW-DEBUG] Wallet Connection Status: ${isConnected}`);
+        const inputs = document.querySelectorAll('#view-voting button, #view-voting input');
+        inputs.forEach(el => {
+            const control = el as HTMLButtonElement | HTMLInputElement;
+            // Allow tab switching buttons to work, disable action buttons
+            const text = control.innerText?.toUpperCase();
+            if (text !== 'ACTIVE' && text !== 'HISTORY') {
+                control.disabled = !isConnected;
+                control.style.opacity = isConnected ? "1" : "0.15";
+                control.style.filter = isConnected ? "none" : "grayscale(1)";
+                control.style.pointerEvents = isConnected ? "auto" : "none";
+            }
+        });
+    }
+    // 6. Update Mobile Nav
+    document.querySelectorAll('.mobile-nav button').forEach(btn => {
+        const onclick = btn.getAttribute('onclick');
+        if (onclick && onclick.includes(`'${viewId}'`)) {
+            btn.classList.add('text-green-400');
+        } else {
+            btn.classList.remove('text-green-400');
+        }
+    });
+};
 // --- STAKING ACTIONS ---
 (window as any).stakeOLV = async () => {
     const amountVal = (document.getElementById('stake-amount') as HTMLInputElement).value;
@@ -1493,29 +1628,197 @@ const updateActionState = (isConnected: boolean) => {
         showToast("Execution Failed");
     }
 };
-//---DISCONNECT----
-(window as any).solana.on('disconnect', () => {
-    console.log("Wallet Disconnected");
-    showToast("Wallet Disconnected");
-    
-    // Reset Connect Button
-    const connectBtn = document.getElementById('connect-btn');
-    if (connectBtn) {
-        connectBtn.innerText = "Connect Wallet";
-        connectBtn.classList.remove('bg-green-500/10', 'text-green-500');
+// Listen for Phantom events
+window.solana.on('connect', () => {
+    const btn = document.getElementById('wallet-btn');
+    const addrDisplay = document.getElementById('wallet-address');
+    if (btn && window.solana.publicKey) {
+        btn.innerText = "WALLET CONNECTED";
+        btn.classList.replace('bg-green-600', 'bg-blue-600');
+        
+        const pk = window.solana.publicKey.toString();
+        addrDisplay.innerText = pk.slice(0, 4) + ".." + pk.slice(-4);
+        addrDisplay.classList.remove('hidden');
     }
+});
 
+window.solana.on('disconnect', () => {
+    // This handles cases where the user disconnects via the Phantom App itself
+    const btn = document.getElementById('wallet-btn');
+    if (btn) {
+        btn.innerText = "CONNECT WALLET";
+        btn.classList.replace('bg-blue-600', 'bg-green-600');
+        document.getElementById('wallet-address')?.classList.add('hidden');
+    }
     // Lock UI and Re-render as "Read Only"
     updateActionState(false);
     (window as any).renderProposals(); // This will now show "Connect Wallet to Participate"
 });
 
+window.syncWalletUI = () => {
+    const isConnected = !!(window.solana && window.solana.isConnected);
+    const btn = document.getElementById('wallet-btn');
+    const addrDisplay = document.getElementById('wallet-address');
+    const gameOverlay = document.getElementById('game-locked-overlay');
 
-// --- INITIALIZE ---
+    if (isConnected) {
+        // 1. Update Button & Address
+        const pk = window.solana.publicKey.toString();
+        btn.innerText = "WALLET CONNECTED";
+        btn.classList.replace('bg-green-600', 'bg-blue-600');
+        addrDisplay.innerText = pk.slice(0, 4) + ".." + pk.slice(-4);
+        addrDisplay.classList.remove('hidden');
+
+        // 2. Hide Game Overlay
+        gameOverlay?.classList.add('hidden');
+    } else {
+        // 1. Reset Button & Address
+        btn.innerText = "CONNECT WALLET";
+        btn.classList.replace('bg-blue-600', 'bg-green-600');
+        addrDisplay.classList.add('hidden');
+
+        // 2. Show Game Overlay (Only if we are on the game view)
+        const currentView = document.querySelector('.view-section:not(.hidden)');
+        if (currentView?.id === 'view-game') {
+            gameOverlay?.classList.remove('hidden');
+        }
+    }
+
+    // 3. Disable/Enable all restricted Buttons & Inputs
+    // We target anything that modifies the blockchain
+    const restrictedSelectors = [
+        '#stake-amount', '#unstake-amount', 
+        'button[onclick*="processStake"]', 
+        'button[onclick*="processUnstake"]',
+        'button[onclick*="openProposal"]',
+        'button[onclick*="plantSeedling"]',
+        'button[onclick*="buyItem"]'
+    ];
+
+    restrictedSelectors.forEach(selector => {
+        const el = document.querySelector(selector) as HTMLInputElement | HTMLButtonElement;
+        if (el) {
+            el.disabled = !isConnected;
+            el.style.opacity = isConnected ? "1" : "0.3";
+            el.style.cursor = isConnected ? "pointer" : "not-allowed";
+        }
+    });
+};
+
+window.toggleWallet = async () => {
+    const btn = document.getElementById('wallet-btn');
+    const addrDisplay = document.getElementById('wallet-address');
+const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+    const provider = (window as any).solana;
+
+    // 1. MOBILE LOGIC: Redirect to Phantom's In-App Browser
+    if (isMobile && !provider) {
+        const url = window.location.href.replace(/^https?:\/\//, '');
+        const phantomAppUrl = `https://phantom.app/ul/browse/${encodeURIComponent(url)}`;
+        
+        // This opens the Phantom App and loads your site inside it
+        window.location.href = phantomAppUrl;
+        return;
+    }
+
+    // 2. DESKTOP LOGIC: Standard Extension Connect
+    if (!provider) {
+        alert("Wallet not found! Please install Phantom.");
+        window.open("https://phantom.app/", "_blank");
+        return;
+    }
+
+    // IF DISCONNECTED -> CONNECT
+    if (!window.solana?.isConnected) {
+        try {
+            const resp = await window.solana.connect();
+            const publicKey = resp.publicKey.toString();
+            
+            // 1. Update Button Label
+            btn.innerText = "WALLET CONNECTED";
+            btn.classList.replace('bg-green-600', 'bg-blue-600');
+
+            // 2. Show Truncated Address
+            const truncated = publicKey.slice(0, 4) + ".." + publicKey.slice(-4);
+            addrDisplay.innerText = truncated;
+            addrDisplay.classList.remove('hidden');
+
+            console.log("Connected to:", publicKey);
+            window.syncWalletUI();
+            // Optional: Auto-load the game once connected
+           // window.showView('game');
+
+        } catch (err) {
+            console.error("Connection failed", err);
+        }
+    } 
+    // IF CONNECTED -> TOTAL DISCONNECT
+else {
+        try {
+            await window.solana.disconnect();
+            
+            // Clear local storage if you store balances there
+            localStorage.removeItem('user_balances'); 
+
+            // Trigger the UI wipe
+            syncUI(); 
+            
+            // Force return home for a clean state
+            window.showView('home');
+            
+            console.log("Wallet disconnected. UI reset.");
+        } catch (err) {
+            console.error("Disconnect failed", err);
+        }
+    }
+};
+
+// --- GLOBAL STATS (Public Data from Chain) ---
+(window as any).syncGlobalStats = async () => {
+    try {
+        // 1. Initialize Program without needing a connected wallet for READ actions
+        const provider = new anchor.AnchorProvider(connection, (window as any).solana, { preflightCommitment: "confirmed" });
+        const program = new anchor.Program(idl as any, provider);
+
+        // 2. Fetch DAO Global State (Total Staked)
+        const daoData: any = await program.account.dao.fetch(daoPDA);
+        const totalStaked = (daoData.totalStaked.toNumber() / 1e9).toLocaleString();
+
+        // 3. Fetch Treasury SOL Balance
+        const vaultBal = await connection.getBalance(vaultPDA);
+        const formattedVault = (vaultBal / LAMPORTS_PER_SOL).toFixed(3);
+
+        // 4. Fetch Temp Oracle Data (Local Storage for now)
+        const oracle = JSON.parse(localStorage.getItem('olive_oracle_data') || '{"co2": "4,820", "harvest": "1,240"}');
+
+        // 5. Update UI
+        const updates = {
+            'vault-balance': formattedVault,
+            'total-staked': totalStaked,
+            'total-co2': oracle.co2 || "4,820",
+            'harvest-liters': oracle.harvest || "1,240"
+        };
+
+        Object.entries(updates).forEach(([id, val]) => {
+            const el = document.getElementById(id);
+            if (el) el.innerText = val;
+        });
+
+        console.log("🔗 [On-Chain Sync] Global stats updated from DAO PDA.");
+    } catch (e) {
+        console.warn("Global Sync Failed (Check if DAO is initialized):", e);
+    }
+};
+
+
+// Update the load listener to trigger this immediately
 window.addEventListener('load', () => {
+    (window as any).syncGlobalStats(); // Fetch public data for everyone
+syncGlobalData();
     setTimeout(() => {
         if ((window as any).solana?.isConnected) {
-            syncUI();
+            syncUI(); // Fetch private data for connected user
         }
     }, 800);
 });
+

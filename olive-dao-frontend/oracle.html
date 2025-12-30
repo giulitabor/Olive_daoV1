@@ -1,24 +1,29 @@
 <!DOCTYPE html>
 <html lang="en">
 <head><title>Olive DAO | Oracle Terminal</title><script src="https://cdn.tailwindcss.com"></script></head>
-<body class="bg-black text-white p-10 font-mono">
-    <div class="max-w-2xl mx-auto border border-green-500/20 p-8 rounded-3xl">
-        <h1 class="text-green-500 text-xl font-black mb-6">> HARVEST ORACLE TERMINAL</h1>
+<body class="bg-[#050505] text-white p-10 font-mono">
+    <div class="max-w-2xl mx-auto border border-green-500/20 p-8 rounded-[2.5rem] bg-black shadow-2xl">
+        <h1 class="text-green-500 text-xl font-black mb-6 tracking-tighter">> HARVEST ORACLE TERMINAL</h1>
         
         <div class="space-y-6">
             <div>
-                <label class="text-[10px] text-gray-500 uppercase">Real-World Temperature (Celsius)</label>
-                <input id="temp" type="number" value="35" class="w-full bg-white/5 border border-white/10 p-3 rounded-xl mt-2 outline-none focus:border-orange-500">
-                <p class="text-[9px] text-orange-400 mt-1">* High heat increases water consumption in-game.</p>
+                <label class="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Global CO2 Sequestrated (KG)</label>
+                <input id="co2" type="number" value="4820" class="w-full bg-white/5 border border-white/10 p-4 rounded-2xl mt-2 outline-none focus:border-green-500 text-xl font-bold">
             </div>
 
             <div>
-                <label class="text-[10px] text-gray-500 uppercase">Net Seasonal Profit (SOL)</label>
-                <input id="profit" type="number" value="10" class="w-full bg-white/5 border border-white/10 p-3 rounded-xl mt-2 outline-none focus:border-green-500">
+                <label class="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Current Harvest Yield (Liters)</label>
+                <input id="harvest" type="number" value="1240" class="w-full bg-white/5 border border-white/10 p-4 rounded-2xl mt-2 outline-none focus:border-yellow-500 text-xl font-bold">
             </div>
 
-            <button onclick="pushOracleData()" class="w-full py-4 bg-green-500 text-black font-black uppercase rounded-xl hover:bg-white transition-all">
-                Broadcast Harvest to DAO
+            <div>
+                <label class="text-[10px] text-gray-500 uppercase font-bold tracking-widest">Field Temp (°C)</label>
+                <input id="temp" type="number" value="35" class="w-full bg-white/5 border border-white/10 p-4 rounded-2xl mt-2 outline-none focus:border-orange-500 text-xl font-bold">
+                <p class="text-[9px] text-orange-400 mt-2 font-bold uppercase italic">* Above 35°C triggers Heatwave alerts for all players.</p>
+            </div>
+
+            <button onclick="pushOracleData()" class="w-full py-5 bg-green-500 text-black font-black uppercase rounded-2xl hover:bg-white transition-all transform active:scale-95 shadow-lg shadow-green-500/20">
+                Broadcast Metrics to DAO
             </button>
         </div>
     </div>
@@ -26,12 +31,23 @@
     <script>
         function pushOracleData() {
             const data = {
+                co2: document.getElementById('co2').value,
+                harvest: document.getElementById('harvest').value,
                 temp: document.getElementById('temp').value,
-                profit: document.getElementById('profit').value,
                 timestamp: Date.now()
             };
             localStorage.setItem('olive_oracle_data', JSON.stringify(data));
-            alert("Oracle Data Pushed! Players will now feel the heat.");
+            
+            // Visual feedback
+            const btn = document.querySelector('button');
+            const originalText = btn.innerText;
+            btn.innerText = "DATA BROADCASTED ✓";
+            btn.classList.replace('bg-green-500', 'bg-blue-500');
+            
+            setTimeout(() => {
+                btn.innerText = originalText;
+                btn.classList.replace('bg-blue-500', 'bg-green-500');
+            }, 2000);
         }
     </script>
 </body>

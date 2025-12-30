@@ -13,43 +13,111 @@
     
 
     <nav class="fixed top-0 w-full z-50 bg-black/60 backdrop-blur-md border-b border-white/5">
-        <div class="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
-            <div class="flex items-center gap-8">
-                <h1 class="text-green-400 font-black italic tracking-tighter text-xl cursor-pointer" onclick="window.showView('home')">OLIVE DAO</h1>
-                <div class="hidden md:flex gap-6 text-[10px] uppercase font-bold tracking-[0.2em] text-gray-400">
-                    <button onclick="window.showView('voting')" class="hover:text-white transition-colors">Governance</button>
-                    <button onclick="window.showView('market')" class="hover:text-white transition-colors">Tree Market</button>
-                    <button onclick="window.showView('game')" class="hover:text-white transition-colors">Web3Game</button>
-                    <button id="nav-admin" onclick="window.showView('admin')" class="hidden hover:text-red-400 text-red-500 transition-colors">Admin</button>
-                </div>
-            </div>
-            <button id="connect-btn" onclick="window.connectWallet()" class="bg-white text-black px-5 py-2 rounded-full font-bold text-[10px] uppercase tracking-wider hover:bg-green-400 transition-all">
-                Connect Wallet
-            </button>
+    <div class="max-w-6xl mx-auto px-6 h-16 flex justify-between items-center">
+        <h1 class="text-green-400 font-black italic tracking-tighter text-xl cursor-pointer" onclick="window.showView('home')">OLIVE DAO</h1>
+        
+        <div class="hidden md:flex gap-8 text-[10px] uppercase font-bold tracking-[0.2em] text-gray-400">
+            <button onclick="window.showView('voting')" class="hover:text-white transition-colors">Governance</button>
+            <button onclick="window.showView('market')" class="hover:text-white transition-colors">Market</button>
+            <button onclick="window.showView('game')" class="hover:text-white transition-colors">Web3Game</button>
         </div>
-    </nav>
+
+        <div class="flex flex-col items-center gap-2">
+    <button id="wallet-btn" onclick="toggleWallet()" class="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-full font-bold transition-all">
+        CONNECT WALLET
+    </button>
+    
+    <span id="wallet-address" class="text-xs text-gray-400 font-mono hidden"></span>
+</div>
+</nav>
+
+<div class="md:hidden fixed bottom-0 left-0 w-full z-[100] bg-black/80 backdrop-blur-xl border-t border-white/10 px-6 pb-8 pt-4">
+    <div class="flex justify-between items-center max-w-md mx-auto">
+        <button onclick="window.showView('home')" class="flex flex-col items-center gap-1 group">
+            <span class="text-xl">🏠</span>
+            <span class="text-[8px] font-black uppercase tracking-tighter text-gray-500 group-active:text-green-400">Home</span>
+        </button>
+        <button onclick="window.showView('game')" class="flex flex-col items-center gap-1 group">
+            <span class="text-xl">🌳</span>
+            <span class="text-[8px] font-black uppercase tracking-tighter text-gray-500 group-active:text-green-400">Game</span>
+        </button>
+        <button onclick="window.showView('voting')" class="flex flex-col items-center gap-1 group">
+            <span class="text-xl">⚖️</span>
+            <span class="text-[8px] font-black uppercase tracking-tighter text-gray-500 group-active:text-green-400">Gov</span>
+        </button>
+        <button onclick="window.showView('market')" class="flex flex-col items-center gap-1 group">
+            <span class="text-xl">🛒</span>
+            <span class="text-[8px] font-black uppercase tracking-tighter text-gray-500 group-active:text-green-400">Shop</span>
+        </button>
+<button id="mobile-wallet-btn" onclick="toggleWallet()" class="flex flex-col items-center gap-1 group">
+            <span class="text-xl" id="mobile-wallet-icon">👛</span>
+            <span id="mobile-wallet-text" class="text-[8px] font-black uppercase tracking-tighter text-gray-500 group-active:text-green-400">Connect</span>
+        </button>
+    </div>
+
+</div>
+
 
     <main class="pt-24 pb-20 px-6 max-w-5xl mx-auto">
 
 <section id="view-home" class="view-section min-h-[80vh] flex flex-col justify-center py-20">
-            <div class="text-center mb-16">
-                <h2 class="text-6xl md:text-8xl font-black italic mb-6 tracking-tighter">THE FUTURE IS <span class="text-green-400">OLIVE.</span></h2>
-                <p class="text-gray-400 max-w-xl mx-auto text-lg leading-relaxed">Join a decentralized collective securing agricultural heritage through blockchain governance.</p>
-            </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
-                <div class="glass p-10 rounded-[2rem] border border-white/5 text-center">
-                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Treasury Vault</p>
-                    <h3 class="text-5xl font-black italic"><span id="vault-balance">0.0000</span> <span class="text-sm not-italic text-gray-600 font-bold">SOL</span></h3>
-                </div>
-                <div class="glass p-10 rounded-[2rem] border border-white/5 text-center">
-                    <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Total Staked Assets</p>
-                    <h3 class="text-5xl font-black italic"><span id="total-staked">0</span> <span class="text-sm not-italic text-gray-600 font-bold">OLV</span></h3>
-                </div>
-            </div>
-            <button onclick="window.joinDao()" class="w-full py-6 bg-green-500 text-black font-black rounded-3xl hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all uppercase italic tracking-tighter text-xl">Join the Collective</button>
-        </section>
+    <div class="text-center mb-16">
+        <h2 class="text-6xl md:text-8xl font-black italic mb-6 tracking-tighter">THE FUTURE IS <span class="text-green-400">OLIVE.</span></h2>
+        <p class="text-gray-400 max-w-xl mx-auto text-lg leading-relaxed">Join a decentralized collective securing agricultural heritage through blockchain governance.</p>
+    </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div class="glass p-10 rounded-[2rem] border border-white/5 text-center">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Treasury Vault</p>
+            <h3 class="text-5xl font-black italic"><span id="vault-balance">5.728</span> <span class="text-sm not-italic text-gray-600 font-bold">SOL</span></h3>
+        </div>
+        <div class="glass p-10 rounded-[2rem] border border-white/5 text-center">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Total Staked Assets</p>
+            <h3 class="text-5xl font-black italic"><span id="total-staked">418.5</span> <span class="text-sm not-italic text-gray-600 font-bold">OLV</span></h3>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12">
+        <div class="glass p-10 rounded-[2rem] border border-white/5 text-center">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">CO2 Sequestrated</p>
+            <h3 class="text-5xl font-black italic"><span id="total-co2">4,820</span> <span class="text-sm not-italic text-gray-600 font-bold">KG</span></h3>
+        </div>
+        <div class="glass p-10 rounded-[2rem] border border-white/5 text-center relative group">
+            <p class="text-[10px] font-bold text-gray-500 uppercase tracking-widest mb-2">Olive Oil Harvest 2025</p>
+<h3 class="text-5xl font-black italic"><span id="harvest-liters">---</span> <span class="text-sm italic text-gray-600">LT</span></h3>
+            <button onclick="window.openHistoryModal()" class="absolute top-4 right-6 text-[9px] bg-white/5 hover:bg-white/10 px-3 py-1 rounded-full border border-white/10 transition-all uppercase font-black">
+                📜 History
+            </button>
+        </div>
+    </div>
+
+    <button onclick="window.joinDao()" class="w-full py-6 bg-green-500 text-black font-black rounded-3xl hover:shadow-[0_0_30px_rgba(34,197,94,0.4)] transition-all uppercase italic tracking-tighter text-xl">Join the Collective</button>
+</section>
+
+<div id="history-modal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+    <div class="absolute inset-0 bg-black/90 backdrop-blur-md" onclick="window.closeHistoryModal()"></div>
+    <div class="glass w-full max-w-md p-8 rounded-[3rem] border border-white/10 relative z-10">
+        <h3 class="text-2xl font-black uppercase tracking-tighter mb-6">Harvest History</h3>
+        <div class="space-y-4">
+            <div class="flex justify-between border-b border-white/5 pb-2"><span>2024</span><span class="font-bold">1,180 LT</span></div>
+            <div class="flex justify-between border-b border-white/5 pb-2"><span>2023</span><span class="font-bold">950 LT</span></div>
+            <div class="flex justify-between border-b border-white/5 pb-2"><span>2022</span><span class="font-bold">1,020 LT</span></div>
+            <div class="flex justify-between border-b border-white/5 pb-2 text-gray-500"><span>2021</span><span>880 LT</span></div>
+            <div class="flex justify-between text-gray-500"><span>2020</span><span>740 LT</span></div>
+        </div>
+        <button onclick="window.closeHistoryModal()" class="w-full mt-8 py-3 bg-white/5 rounded-xl font-bold uppercase text-[10px]">Close</button>
+    </div>
+</div>
 <section id="view-game" class="view-section hidden pt-10">
+<div id="game-locked-overlay" class="hidden absolute inset-0 z-[70] flex flex-col items-center justify-center bg-black/40 backdrop-blur-sm rounded-[3rem]">
+    <div class="glass p-10 rounded-[3rem] border border-green-500/30 text-center max-w-sm animate-fade-in-up">
+        <h3 class="text-4xl font-black italic tracking-tighter mb-4">WANT TO PLAY?</h3>
+        <p class="text-gray-400 mb-8 text-sm uppercase tracking-widest font-bold">Connect your wallet to start planting and earning rewards.</p>
+        <button onclick="toggleWallet()" class="w-full py-4 bg-green-500 text-black font-black rounded-2xl hover:scale-105 transition-all uppercase italic">
+            Connect to Play
+        </button>
+    </div>
+</div>
 <div id="weather-badge" class="hud-alert hidden">CRITICAL HEAT</div>
     <div id="weather-banner" class="fixed top-20 left-1/2 -translate-x-1/2 z-[60] px-6 py-2 rounded-full bg-orange-500 text-black text-[10px] font-black uppercase tracking-widest animate-pulse shadow-[0_0_30px_rgba(249,115,22,0.4)] hidden">
         ⚠️ HEATWAVE: WATER CONSUMPTION x3
@@ -74,8 +142,6 @@
             <span>📍</span> <span id="stat-location">Loading...</span>
         </div>
     </div>
-<div>
-</div>
 </div>
 
     <div id="field-stats-bar" class="glass p-6 rounded-[2.5rem] border border-green-500/20 mb-10 flex flex-wrap justify-between items-center gap-6">

@@ -1,5 +1,180 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
 
+@media (max-width: 768px) {
+    /* Ensure the nav doesn't hide your content */
+    nav .flex.gap-6 {
+        display: flex !important; /* Force show buttons on mobile */
+        gap: 10px;
+        font-size: 8px; /* Shrink text to fit screen width */
+    }
+    
+    /* Make the HUD smaller so it doesn't cover the whole phone */
+    .hud-sidebar {
+        width: 140px;
+        padding: 0.75rem;
+        right: 0.5rem;
+        top: 4.5rem;
+    }
+}
+/* Force hidden elements to stay hidden regardless of their position type */
+.hidden {
+    display: none !important;
+}
+
+/* Visual feedback for disabled gated buttons */
+.wallet-gated:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+    filter: grayscale(1);
+}
+
+
+/* If the game view is hidden, force the HUD and Banner to hide too */
+#view-game.hidden #weather-hud,
+#view-game.hidden #weather-banner,
+#view-game.hidden #weather-badge {
+    display: none !important;
+}
+
+/* KILL THE BLEEDING */
+.view-section.hidden {
+    display: none !important;
+}
+/* Add padding to the bottom of the main content ONLY on mobile */
+@media (max-width: 768px) {
+    main {
+        padding-bottom: 100px !important; /* Space for the bottom nav */
+    }
+    
+    /* Make the game HUD smaller on mobile so it doesn't overlap the nav */
+    .hud-sidebar {
+        top: 80px !important;
+        right: 15px !important;
+        transform: scale(0.85);
+        transform-origin: top right;
+    }
+}
+
+#grove-grid {
+    display: grid;
+    gap: 1rem;
+    /* 1 column on mobile, 3 on desktop */
+    grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+    #grove-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+/* Ensure trees don't overflow their cards */
+.tree-card img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* Ensure the Game View is the 'anchor' for all its children */
+#view-game {
+    position: relative;
+    min-height: 100vh;
+}
+
+/* If you have a floating stats bar, make it absolute to the GAME view, not the window */
+.field-stats-bar {
+    position: absolute; /* Changed from fixed */
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 50;
+}
+
+/* Safety Override: If the view-game has the 'hidden' class, 
+   force-hide every child regardless of their internal CSS */
+#view-game.hidden * {
+    display: none !important;
+}
+
+/* Mobile Default (Base) */
+.view-section {
+    padding: 1rem;
+    padding-bottom: 100px; /* Space for bottom nav */
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+/* Bottom Tab Bar (Thumb Zone) */
+.mobile-nav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 70px;
+    background: rgba(15, 23, 42, 0.95);
+    backdrop-filter: blur(10px);
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    border-top: 1px solid rgba(255,255,255,0.1);
+    z-index: 1000;
+}
+
+/* Hide desktop sidebar on mobile */
+@media (max-width: 768px) {
+    .desktop-only { display: none !important; }
+}
+
+button:disabled {
+    filter: grayscale(1);
+    pointer-events: none;
+    background-color: #1a1a1a !important;
+    border: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+#view-game {
+    position: relative; /* Essential for the absolute overlay to work */
+}
+
+/* Ensure the demo keeps running in the background while blurred */
+#game-locked-overlay {
+    backdrop-filter: blur(8px);
+    transition: all 0.5s ease;
+}
+/* Optional: Smooth transition when switching views */
+.view-section {
+    transition: opacity 0.2s ease-in-out;
+}
+/* Ensure fixed HUD elements disappear when the game view is hidden */
+#view-game.hidden #weather-hud,
+#view-game.hidden #weather-banner,
+#view-game.hidden #weather-badge {
+    display: none !important;
+}
+
+/* Make the HUD stay inside the game area on mobile */
+@media (max-width: 768px) {
+    .hud-sidebar {
+        position: absolute !important; /* Switch from fixed to absolute */
+        top: 10px !important;
+        right: 10px !important;
+        transform: scale(0.8); /* Shrink it to fit mobile */
+        z-index: 40;
+    }
+}
+/* Ensure the Banner doesn't stay stuck on top of Governance */
+#weather-banner {
+    position: absolute; /* Change from fixed to absolute */
+    top: 10px;
+    z-index: 60;
+}
+
+/* Ensure the HUD stays inside the game area */
+.hud-sidebar {
+    position: absolute; /* Change from fixed to absolute */
+    top: 10px;
+    right: 10px;
+}
 /* --- 1. RESET & GLOBAL CORE --- */
 :root {
     background-color: #050505;
@@ -402,4 +577,77 @@ body.wallet-disconnected main {
     pointer-events: none !important;
     filter: grayscale(1) brightness(0.4) blur(4px);
     user-select: none;
+}
+
+/* If a view is hidden, nothing inside it can be displayed */
+.view-section.hidden, 
+.view-section.hidden * {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Ensure the grid is killed specifically */
+#grove-grid {
+    display: grid; /* Default */
+}
+
+/* SURGICAL KILL: If a view is hidden, force-hide every single descendant */
+.view-section.hidden, 
+.view-section.hidden * {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+}
+
+/* Ensure the Governance tab is clean and inputs are locked if no wallet */
+#view-voting:not(.hidden) {
+    display: block !important;
+}
+
+/* KILL ALL BLEEDING: If the section is hidden, hide every single child element */
+.view-section.hidden, 
+.view-section.hidden * {
+    display: none !important;
+    visibility: hidden !important;
+}
+
+/* VISUAL LOCK: Make disabled buttons look dead */
+button:disabled, input:disabled {
+    opacity: 0.2 !important;
+    cursor: not-allowed !important;
+    filter: grayscale(1);
+    pointer-events: none !important;
+}
+
+/* If a section is hidden, its children MUST be hidden */
+.hidden, .view-section.hidden * {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
+/* Force specific elements that were "bleeding" to hide */
+#weather-hud.hidden, #grove-grid.hidden, #field-stats-bar.hidden {
+    display: none !important;
+}
+
+/* Make disabled buttons look completely inactive */
+button:disabled {
+    cursor: not-allowed !important;
+    pointer-events: none !important;
+    filter: grayscale(1) brightness(0.5);
+    opacity: 0.2 !important;
+}
+/* Personal Stat Cards - Grayscale when no wallet */
+#gov-user-sol, #gov-user-olv, #gov-user-staked {
+    transition: color 0.3s ease;
+}
+
+/* Optional: add a class to these in HTML to dim them automatically */
+.wallet-locked {
+    filter: blur(2px);
+    opacity: 0.5;
+    pointer-events: none;
 }
